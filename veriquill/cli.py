@@ -11,6 +11,7 @@ import typer
 from veriquill.claims.engine import collect_claims
 from veriquill.config import get_settings
 from veriquill.dossier import build_dossier
+from veriquill.eval.harness import evaluate as run_evaluation
 from veriquill.pipeline import analyse_candidate
 from veriquill.reconcile.engine import reconcile
 
@@ -111,6 +112,36 @@ def dossier(
         typer.echo(f"wrote {output}")
     else:
         typer.echo(payload)
+
+
+@app.command()
+def evaluate(
+    output: Path = typer.Option(None, "--output", "-o", help="Write the JSON report here."),
+) -> None:
+    """Measure the checks against hand-labelled cases.
+
+    Reports precision and recall per check, plus whether stated confidence is
+    earned. Needs no GitHub token and makes no network calls.
+    """
+    settings = get_settings()
+    report = run_evaluation(settings)
+
+    payload = json.dumps(report, indent=2)
+    if output is not None:
+        output.write_text(payload, encoding="utf-8")
+        typer.echo(f"wrote {output}")
+
+    overall = report["overall"]
+    typer.echo(
+        f"{report['cases_passed']}/{report['cases_run']} cases behaved as labelled | "
+        f"precision {overall['precision']:.2f} recall {overall['recall']:.2f}"
+    )
+    if report["false_alarms_on_clean_cases"]:
+        typer.echo(
+            "false alarms: " + ", ".join(report["false_alarms_on_clean_cases"]),
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

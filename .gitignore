@@ -39,3 +39,9 @@ cache/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Evaluation artifacts
+eval_report.json
+dossier.json
+claims_tmp.json
+demo_*.txt

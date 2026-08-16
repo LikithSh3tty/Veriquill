@@ -1,0 +1,162 @@
+"""Running the labelled cases and reporting what the checks actually do.
+
+The report separates three questions the specification asks separately:
+how often a check is right when it fires (precision), how much it catches
+(recall), and whether its stated confidence is earned (calibration).
+"""
+
+from __future__ import annotations
+
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from veriquill.codeeval.engine import run_codeeval
+from veriquill.config import Settings
+from veriquill.context import RepoContext
+from veriquill.eval.groundtruth import CASES, LabeledCase
+from veriquill.eval.metrics import calibration_bins, score_checks
+from veriquill.findings import Finding
+from veriquill.github.history import read_history
+
+
+@dataclass
+class CaseOutcome:
+    name: str
+    description: str
+    fired: set[str] = field(default_factory=set)
+    expected: set[str] = field(default_factory=set)
+    forbidden: set[str] = field(default_factory=set)
+    findings: list[Finding] = field(default_factory=list)
+    error: str | None = None
+
+    @property
+    def labelled(self) -> set[str]:
+        """Checks this case makes a claim about.
+
+        A check nobody labelled for this case tells us nothing about it: the
+        case was not built to exercise it either way. Scoring against absent
+        labels would count correct behaviour as a false positive.
+        """
+        return self.expected | self.forbidden
+
+    @property
+    def missed(self) -> set[str]:
+        return self.expected - self.fired
+
+    @property
+    def false_alarms(self) -> set[str]:
+        """Forbidden checks that fired: the failures that matter most."""
+        return self.fired & self.forbidden
+
+    @property
+    def passed(self) -> bool:
+        return not self.missed and not self.false_alarms and self.error is None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "case": self.name,
+            "description": self.description,
+            "passed": self.passed,
+            "fired": sorted(self.fired),
+            "missed": sorted(self.missed),
+            "false_alarms": sorted(self.false_alarms),
+            "error": self.error,
+        }
+
+
+def run_case(case: LabeledCase, settings: Settings, workdir: Path) -> CaseOutcome:
+    from veriquill.provenance.engine import run_provenance
+
+    outcome = CaseOutcome(
+        name=case.name,
+        description=case.description,
+        expected=set(case.expected),
+        forbidden=set(case.forbidden),
+    )
+
+    try:
+        repo_path = case.build(workdir)
+        ctx = RepoContext(
+            full_name=f"eval/{case.name}",
+            path=repo_path,
+            candidate_handle="eval",
+            identities=frozenset(i.lower() for i in case.identities),
+            commits=read_history(repo_path),
+            metadata=dict(case.metadata),
+        )
+        findings = run_provenance(ctx, settings, known_fingerprints={})
+        findings.extend(run_codeeval(ctx, settings))
+        outcome.findings = findings
+        outcome.fired = {f.check_id for f in findings}
+    except Exception as exc:  # a broken case must not silently pass
+        outcome.error = f"{type(exc).__name__}: {exc}"
+
+    return outcome
+
+
+def evaluate(
+    settings: Settings, cases: tuple[LabeledCase, ...] = CASES
+) -> dict[str, Any]:
+    outcomes: list[CaseOutcome] = []
+
+    with tempfile.TemporaryDirectory(prefix="veriquill-eval-") as raw:
+        workdir = Path(raw)
+        for case in cases:
+            outcomes.append(run_case(case, settings, workdir))
+
+    # Score only over checks each case actually labels, in both directions.
+    scores = score_checks(
+        [(o.fired & o.labelled, o.expected) for o in outcomes]
+    )
+
+    # Calibration is judged on the same labelled subset, for the same reason:
+    # a finding whose check the case never labelled is not evidence either way.
+    observations: list[tuple[float, bool]] = [
+        (finding.confidence, finding.check_id in outcome.expected)
+        for outcome in outcomes
+        for finding in outcome.findings
+        if finding.check_id in outcome.labelled
+    ]
+    bins = calibration_bins(observations)
+
+    true_positives = sum(s.true_positives for s in scores.values())
+    false_positives = sum(s.false_positives for s in scores.values())
+    false_negatives = sum(s.false_negatives for s in scores.values())
+    fired_total = true_positives + false_positives
+    expected_total = true_positives + false_negatives
+
+    false_alarms = sorted(
+        {check for o in outcomes for check in o.false_alarms}
+    )
+
+    return {
+        "cases_run": len(outcomes),
+        "cases_passed": sum(1 for o in outcomes if o.passed),
+        "overall": {
+            "precision": round(true_positives / fired_total, 4) if fired_total else 0.0,
+            "recall": round(true_positives / expected_total, 4)
+            if expected_total
+            else 0.0,
+            "true_positives": true_positives,
+            "false_positives": false_positives,
+            "false_negatives": false_negatives,
+        },
+        "false_alarms_on_clean_cases": false_alarms,
+        "per_check": [score.to_dict() for score in scores.values()],
+        "calibration": [b.to_dict() for b in bins if b.count],
+        "cases": [o.to_dict() for o in outcomes],
+        "limitations": [
+            "These cases are synthetic repositories built to known shapes. They "
+            "measure whether each check fires on the shape it targets, not "
+            "whether its thresholds suit real portfolios.",
+            "No hand-labelled real profiles are included yet, so no claim is "
+            "made about precision in the field.",
+            "Scoring covers only the checks each case explicitly labels as "
+            "expected or forbidden. Checks a case says nothing about are "
+            "excluded rather than counted as errors.",
+            "Ranking correlation against expert consensus is not measured; "
+            "there is no ranking step to measure.",
+        ],
+    }

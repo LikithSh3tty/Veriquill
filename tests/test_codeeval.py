@@ -147,3 +147,28 @@ def test_engine_returns_sorted_findings_and_survives_empty_repo(tmp_path):
     (tmp_path / "empty").mkdir()
     findings = run_codeeval(_ctx(tmp_path / "empty"), _settings(tmp_path))
     assert findings == []
+
+
+def test_assert_in_a_test_file_is_not_reported_as_a_security_issue(tmp_path):
+    """Bandit's B101 fires on every `assert`. In a test file that is the point.
+
+    Reporting it would penalise a candidate for writing tests.
+    """
+    _write(tmp_path, "src/app.py", "def add(a, b):\n    return a + b\n")
+    _write(
+        tmp_path,
+        "tests/test_app.py",
+        "from src.app import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n",
+    )
+    profile = profile_repo(tmp_path)
+
+    ids = {f.check_id for f in check_security(_ctx(tmp_path), profile, _settings(tmp_path))}
+    assert "codeeval.security.b101" not in ids
+
+
+def test_assert_outside_a_test_file_is_still_reported(tmp_path):
+    _write(tmp_path, "src/app.py", "def add(a, b):\n    assert a\n    return a + b\n")
+    profile = profile_repo(tmp_path)
+
+    ids = {f.check_id for f in check_security(_ctx(tmp_path), profile, _settings(tmp_path))}
+    assert "codeeval.security.b101" in ids

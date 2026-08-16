@@ -29,6 +29,19 @@ def _relative(filename: str, root: Path) -> str:
         return Path(filename).name
 
 
+def _is_noise(issue: dict) -> bool:
+    """Findings that are correct in general but meaningless here.
+
+    B101 (assert_used) fires on every `assert` statement. In a test file that
+    is the entire point of the file, so reporting it would penalise a
+    candidate for writing tests.
+    """
+    if issue.get("test_id") != "B101":
+        return False
+    name = Path(issue.get("filename", "")).name
+    return name.startswith("test_") or name.endswith("_test.py")
+
+
 def check_security(
     ctx: RepoContext, profile: LanguageProfile, settings: Settings
 ) -> list[Finding]:
@@ -52,6 +65,8 @@ def check_security(
 
     grouped: dict[tuple[str, str], list[dict]] = {}
     for issue in report.get("results", []):
+        if _is_noise(issue):
+            continue
         key = (issue["test_id"], issue["issue_severity"].upper())
         grouped.setdefault(key, []).append(issue)
 
