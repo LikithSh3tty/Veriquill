@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     api_base_url: str = "https://api.github.com"
     data_dir: Path = Path(".veriquill")
 
+    # Claim refinement (optional; the structural parsers always run without it)
+    claim_model: str = Field(
+        default="claude-opus-5",
+        description="Model used to phrase claims the structural parser missed.",
+    )
+    claim_refinement_enabled: bool = True
+    claim_max_tokens: int = 16000
+
     # Rate limiting
     rate_limit_floor: int = Field(
         default=100,
