@@ -13,10 +13,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from veriquill import __version__
+from veriquill.codeeval.detect import profile_repo
 from veriquill.codeeval.engine import run_codeeval
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import Finding
+from veriquill.reconcile.evidence import RepoEvidence
+from veriquill.vendored import is_vendored
 from veriquill.github.client import GitHubClient
 from veriquill.github.clone import CloneError, ephemeral_clone
 from veriquill.github.history import read_history
@@ -27,11 +30,35 @@ from veriquill.provenance.engine import run_provenance
 logger = logging.getLogger(__name__)
 
 
+def build_evidence(ctx: RepoContext, findings: list[Finding]) -> RepoEvidence:
+    """Flatten what the engines learned into the shape reconciliation compares."""
+    authored = ctx.authored_commits
+    authored_loc = sum(
+        change.insertions
+        for commit in authored
+        for change in commit.files
+        if not is_vendored(change.path)
+    )
+    profile = profile_repo(ctx.path)
+
+    return RepoEvidence(
+        full_name=ctx.full_name,
+        description=str(ctx.metadata.get("description") or ""),
+        topics=tuple(ctx.metadata.get("topics") or ()),
+        languages=dict(profile.languages),
+        authored_commits=len(authored),
+        total_commits=len(ctx.commits),
+        authored_loc=authored_loc,
+        check_ids=tuple(f.check_id for f in findings),
+    )
+
+
 @dataclass
 class RepoResult:
     full_name: str
     findings: list[Finding] = field(default_factory=list)
     error: str | None = None
+    evidence: RepoEvidence | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -107,6 +134,7 @@ async def _analyse_repo(
                 )
                 result.findings = run_provenance(ctx, settings, known_fingerprints)
                 result.findings.extend(run_codeeval(ctx, settings))
+                result.evidence = build_evidence(ctx, result.findings)
                 known_fingerprints[f"{handle}:{full_name}"] = fingerprint_repo(ctx)
         except CloneError as exc:
             result.error = str(exc)

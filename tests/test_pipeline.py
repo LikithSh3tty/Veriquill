@@ -89,3 +89,53 @@ async def test_every_finding_in_a_summary_cites_evidence(tmp_path, monkeypatch):
     findings = [f for repo in payload["repositories"] for f in repo["findings"]]
     assert findings
     assert all(f["evidence"] for f in findings)
+
+
+async def test_evidence_is_built_for_each_analysed_repository(tmp_path, monkeypatch):
+    sources = tmp_path / "sources"
+    good = build_repo(sources, "good", organic_history())
+
+    async def fake_identity(client, handle):
+        return {"identities": frozenset({"candidate@example.com", "candidate"})}
+
+    async def fake_repos(client, handle):
+        return [
+            {
+                "full_name": "cand/good",
+                "clone_url": good.as_uri(),
+                "fork": False,
+                "description": "an organic repository",
+                "topics": ["demo"],
+            }
+        ]
+
+    monkeypatch.setattr("veriquill.pipeline.fetch_identity", fake_identity)
+    monkeypatch.setattr("veriquill.pipeline.list_repositories", fake_repos)
+
+    settings = Settings(github_token="t", data_dir=tmp_path / "data")
+    summary = await analyse_candidate("cand", settings, client=FakeClient())
+
+    evidence = summary.repositories[0].evidence
+    assert evidence is not None
+    assert evidence.full_name == "cand/good"
+    assert evidence.description == "an organic repository"
+    assert evidence.topics == ("demo",)
+    assert evidence.authored_commits == 12
+    assert evidence.total_commits == 12
+    assert evidence.languages.get("Python")
+
+
+async def test_a_failed_repository_carries_no_evidence(tmp_path, monkeypatch):
+    async def fake_identity(client, handle):
+        return {"identities": frozenset({"candidate"})}
+
+    async def fake_repos(client, handle):
+        return [{"full_name": "cand/missing", "clone_url": (tmp_path / "nope").as_uri()}]
+
+    monkeypatch.setattr("veriquill.pipeline.fetch_identity", fake_identity)
+    monkeypatch.setattr("veriquill.pipeline.list_repositories", fake_repos)
+
+    settings = Settings(github_token="t", data_dir=tmp_path / "data")
+    summary = await analyse_candidate("cand", settings, client=FakeClient())
+
+    assert summary.repositories[0].evidence is None

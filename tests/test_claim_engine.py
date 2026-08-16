@@ -96,3 +96,42 @@ def test_no_sources_at_all_is_not_an_error(tmp_path):
     result = collect_claims(_settings(tmp_path))
     assert result.claims == []
     assert result.errors == []
+
+
+def test_the_same_sentence_classified_twice_is_kept_once(tmp_path):
+    """A refiner may label one line both a role and an achievement.
+
+    It is still one statement, and raising it twice in the dossier means the
+    recruiter asks the same question twice.
+    """
+    from veriquill.claims.engine import _dedupe
+    from veriquill.claims.models import Claim, ClaimKind, ClaimSource
+
+    source = ClaimSource(
+        document="resume.txt", locator="line 5", excerpt="Built the payments service"
+    )
+    claims = [
+        Claim(kind=ClaimKind.ROLE, text="Built the payments service", source=source),
+        Claim(
+            kind=ClaimKind.ACHIEVEMENT, text="Built the payments service", source=source
+        ),
+    ]
+
+    assert len(_dedupe(claims)) == 1
+
+
+def test_different_statements_from_one_line_are_both_kept(tmp_path):
+    from veriquill.claims.engine import _dedupe
+    from veriquill.claims.models import Claim, ClaimKind, ClaimSource
+
+    source = ClaimSource(
+        document="resume.txt", locator="line 5", excerpt="Built the payments service"
+    )
+    claims = [
+        Claim(kind=ClaimKind.ROLE, text="Built the payments service", source=source),
+        Claim(
+            kind=ClaimKind.SKILL, text="payments", source=source, subject="payments"
+        ),
+    ]
+
+    assert len(_dedupe(claims)) == 2

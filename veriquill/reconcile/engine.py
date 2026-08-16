@@ -11,7 +11,7 @@ sources attached.
 
 from __future__ import annotations
 
-from veriquill.claims.models import Claim
+from veriquill.claims.models import Claim, ClaimKind
 from veriquill.reconcile.evidence import RepoEvidence
 from veriquill.reconcile.matcher import UNMATCHABLE_KINDS, match_claim
 from veriquill.reconcile.models import Reconciliation, Verdict
@@ -19,6 +19,16 @@ from veriquill.reconcile.models import Reconciliation, Verdict
 # Below this share of commits, a matched repository does not support a claim
 # of having built the thing.
 _WEAK_AUTHORSHIP = 0.1
+
+# Only these kinds assert that the candidate *made* something, so only these
+# can be contradicted by authorship evidence. "I know Ruby" is not a claim to
+# have authored any particular Ruby repository: finding one they did not write
+# fails to support the skill, but it does not refute it. Treating it as a
+# contradiction would manufacture exactly the false accusation section 16
+# names as this tool's most harmful failure.
+AUTHORSHIP_CLAIMS = frozenset(
+    {ClaimKind.PROJECT, ClaimKind.ROLE, ClaimKind.ACHIEVEMENT}
+)
 
 
 def _judge(claim: Claim, matches: list[RepoEvidence]) -> Reconciliation:
@@ -59,6 +69,20 @@ def _judge(claim: Claim, matches: list[RepoEvidence]) -> Reconciliation:
             confidence=min(0.6 + best.authorship_share / 2, 0.95),
             claim=claim,
             evidence=tuple(supporting),
+        )
+
+    if claim.kind not in AUTHORSHIP_CLAIMS:
+        return Reconciliation(
+            verdict=Verdict.UNVERIFIABLE,
+            rationale=(
+                "The repositories that mention this were not authored by the "
+                "candidate, so they do not support the claim. A skill can be "
+                "held without having authored any particular repository, so "
+                "this is not evidence against it either."
+            ),
+            confidence=0.5,
+            claim=claim,
+            evidence=tuple(matches),
         )
 
     worst = matches[0]

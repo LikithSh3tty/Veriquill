@@ -62,12 +62,23 @@ def _dedupe(claims: list[Claim]) -> list[Claim]:
     """
     kept: list[Claim] = []
     seen: set[tuple[ClaimKind, str]] = set()
+    verbatim: set[tuple[str, str, str]] = set()
 
     for claim in claims:
         key = (claim.kind, (claim.subject or claim.text).strip().lower())
         if key in seen:
             continue
+        # The same sentence classified two ways is still one statement. Without
+        # this the dossier raises the same question twice, once per kind.
+        exact = (
+            claim.source.document,
+            claim.source.locator,
+            claim.text.strip().lower(),
+        )
+        if exact in verbatim:
+            continue
         seen.add(key)
+        verbatim.add(exact)
         kept.append(claim)
 
     return kept

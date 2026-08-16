@@ -142,3 +142,24 @@ def test_results_are_ordered_most_decisive_first():
 
     assert verdicts[0] is Verdict.CONTRADICTED
     assert verdicts.index(Verdict.CORROBORATED) < verdicts.index(Verdict.UNVERIFIABLE)
+
+
+def test_a_skill_is_never_contradicted_by_authorship():
+    """Knowing a language is not a claim to have authored a given repository.
+
+    Section 16 names false accusations as the most harmful thing this tool can
+    do. Finding one Python repo the candidate did not write says nothing about
+    whether they know Python, so it must not read as a contradiction.
+    """
+    claim = _claim(ClaimKind.SKILL, "Python", subject="python")
+    result = _for_claim(reconcile([claim], [NOT_REALLY_THEIRS]), claim)
+
+    assert result.verdict is Verdict.UNVERIFIABLE
+    assert result.counts_against is False
+
+
+def test_a_project_claim_is_still_contradicted_by_authorship():
+    claim = _claim(ClaimKind.PROJECT, "payments", subject="payments")
+    result = _for_claim(reconcile([claim], [NOT_REALLY_THEIRS]), claim)
+
+    assert result.verdict is Verdict.CONTRADICTED
