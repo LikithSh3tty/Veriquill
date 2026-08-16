@@ -1,0 +1,71 @@
+"""Runs every code-evaluation analyser.
+
+The engine is explicit about what it did not analyse. Silence about a language
+would read as a clean bill of health, which would be dishonest.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from veriquill.codeeval.complexity import check_complexity
+from veriquill.codeeval.detect import DEEPLY_ANALYSED, LanguageProfile, profile_repo
+from veriquill.codeeval.security import check_security
+from veriquill.codeeval.structure import check_structure
+from veriquill.codeeval.style import check_style
+from veriquill.codeeval.tests import check_tests
+from veriquill.config import Settings
+from veriquill.context import RepoContext
+from veriquill.findings import EvidenceRef, Finding, Severity
+
+logger = logging.getLogger(__name__)
+
+_ANALYSERS = (
+    check_complexity,
+    check_security,
+    check_style,
+    check_tests,
+    check_structure,
+)
+
+
+def coverage_note(profile: LanguageProfile, repo_name: str = "") -> Finding | None:
+    shallow = sorted(set(profile.languages) - DEEPLY_ANALYSED)
+    if not shallow:
+        return None
+    return Finding(
+        check_id="codeeval.coverage_note",
+        severity=Severity.INFO,
+        title="Some languages were not deeply analysed",
+        rationale=(
+            "Milestone M1 analyses Python in depth. These languages were detected "
+            f"and counted only: {', '.join(shallow)}. No quality judgment is made "
+            "about them, in either direction."
+        ),
+        confidence=1.0,
+        evidence=(
+            EvidenceRef(
+                repo=repo_name,
+                detail=f"detected languages: {', '.join(sorted(profile.languages))}",
+            ),
+        ),
+    )
+
+
+def run_codeeval(ctx: RepoContext, settings: Settings) -> list[Finding]:
+    profile = profile_repo(ctx.path)
+    if not profile.languages:
+        return []
+
+    findings: list[Finding] = []
+    for analyser in _ANALYSERS:
+        try:
+            findings.extend(analyser(ctx, profile, settings))
+        except Exception:
+            logger.exception("analyser %s failed on %s", analyser.__name__, ctx.full_name)
+
+    note = coverage_note(profile, ctx.full_name)
+    if note is not None:
+        findings.append(note)
+
+    return sorted(findings, key=lambda f: (f.severity.rank, f.check_id))
