@@ -112,6 +112,67 @@ def test_claims_already_found_structurally_are_not_duplicated(tmp_path):
     assert refiner.refine(DOC, existing=existing) == []
 
 
+def test_a_rephrasing_of_an_already_parsed_line_is_dropped(tmp_path):
+    """Same line, same kind, different words is still the same claim.
+
+    Without this the dossier shows one statement twice: once as the resume
+    wrote it and once as the model restated it.
+    """
+    existing = [
+        Claim(
+            kind=ClaimKind.ACHIEVEMENT,
+            text="Shipped the payments service end to end.",
+            source=ClaimSource(
+                document="resume.txt",
+                locator="line 2",
+                excerpt="Shipped the payments service end to end.",
+            ),
+        )
+    ]
+    client = FakeClient(
+        {
+            "claims": [
+                {
+                    "kind": "achievement",
+                    "text": "Delivered the payments service from start to finish",
+                    "excerpt": "Shipped the payments service end to end.",
+                }
+            ]
+        }
+    )
+    refiner = ClaimRefiner(_settings(tmp_path), client=client)
+
+    assert refiner.refine(DOC, existing=existing) == []
+
+
+def test_a_different_kind_on_the_same_line_is_still_allowed(tmp_path):
+    existing = [
+        Claim(
+            kind=ClaimKind.ACHIEVEMENT,
+            text="Shipped the payments service end to end.",
+            source=ClaimSource(
+                document="resume.txt",
+                locator="line 2",
+                excerpt="Shipped the payments service end to end.",
+            ),
+        )
+    ]
+    client = FakeClient(
+        {
+            "claims": [
+                {
+                    "kind": "skill",
+                    "text": "payments systems",
+                    "excerpt": "Shipped the payments service end to end.",
+                }
+            ]
+        }
+    )
+    refiner = ClaimRefiner(_settings(tmp_path), client=client)
+
+    assert len(refiner.refine(DOC, existing=existing)) == 1
+
+
 def test_a_refusal_returns_no_claims_rather_than_raising(tmp_path):
     client = FakeClient({"claims": []}, stop_reason="refusal")
     refiner = ClaimRefiner(_settings(tmp_path), client=client)

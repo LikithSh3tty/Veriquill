@@ -93,16 +93,23 @@ class ClaimRefiner:
             return []
 
         seen = {(c.kind, c.text.strip().lower()) for c in existing}
+        # A rephrasing is still the same claim. The structural parser already
+        # read every line it understood, so a line it covered for this kind is
+        # not available for the model to restate in different words.
+        covered = {(c.kind, c.source.locator) for c in existing}
         refined: list[Claim] = []
 
         for item in payload.get("claims", []):
             claim = self._ground(item, document)
             if claim is None:
                 continue
+            if (claim.kind, claim.source.locator) in covered:
+                continue
             key = (claim.kind, claim.text.strip().lower())
             if key in seen:
                 continue
             seen.add(key)
+            covered.add((claim.kind, claim.source.locator))
             refined.append(claim)
 
         return refined
