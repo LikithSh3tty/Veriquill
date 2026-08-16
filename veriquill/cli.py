@@ -14,6 +14,16 @@ from veriquill.pipeline import analyse_candidate
 app = typer.Typer(help="Veriquill: evidence-first portfolio verification.")
 
 
+@app.callback()
+def main() -> None:
+    """Keep `veriquill` a command group.
+
+    With a single registered command Typer collapses the group and swallows the
+    subcommand name as the first argument, so `veriquill analyse <handle>` would
+    silently read "analyse" as the handle.
+    """
+
+
 @app.command()
 def analyse(
     handle: str = typer.Argument(..., help="GitHub handle to analyse."),
