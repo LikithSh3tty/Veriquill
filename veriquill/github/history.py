@@ -6,6 +6,7 @@ size costs nothing against the hourly quota.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -61,6 +62,11 @@ def _parse_numstat(line: str) -> FileChange | None:
 
 
 def read_history(repo_path: Path) -> list[Commit]:
+    # `--numstat` diffs every commit, which reads blobs. Against a partial
+    # clone git would silently fetch each missing blob from the remote, one
+    # round trip at a time, turning a 20-second read into hours. Refuse to go
+    # to the network: fail loudly instead of stalling.
+    env = {**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_TERMINAL_PROMPT": "0"}
     result = subprocess.run(
         [
             "git",
@@ -74,6 +80,7 @@ def read_history(repo_path: Path) -> list[Commit]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env=env,
     )
     if result.returncode != 0:
         # An empty repository has no HEAD; that is not an error condition.
