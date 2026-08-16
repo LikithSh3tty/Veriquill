@@ -66,10 +66,18 @@ returns it.
 
 Veriquill requires a GitHub token and refuses to run without one:
 unauthenticated REST allows 60 requests per hour, authenticated allows 5,000.
-Commit history and file contents come from `git clone --filter=blob:none`,
-which is not billed against that quota, so REST use stays at roughly two to
-five calls per candidate. Those calls are ETag-cached, and a 304 response is
+
+Commit history and file contents come from `git clone`, which runs over git
+transport and is not billed against that quota. REST is used only to resolve
+the candidate and list their repositories: an eight-repository account costs
+exactly **two** REST calls. Those calls are ETag-cached and a 304 response is
 free, so repeat runs on the same candidate cost almost nothing.
+
+Clones are deliberately complete rather than `--filter=blob:none`. Partial
+clones look cheaper and are much worse here: provenance reads history with
+`git log --numstat`, which diffs every commit and therefore needs blob
+contents, so git back-fills them from the remote one round trip at a time. A
+repository that clones in 19 seconds took over an hour to analyse that way.
 
 ## Tests
 

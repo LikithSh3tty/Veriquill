@@ -55,6 +55,14 @@ class Settings(BaseSettings):
         default=1000,
         description="Repositories smaller than this are too small to judge.",
     )
+    fork_min_total_loc: int = Field(
+        default=200,
+        description=(
+            "Repositories smaller than this are too trivial for the fork check. "
+            "Calling a 40-line repository 'a fork presented as original' is "
+            "technically true and practically an overstatement."
+        ),
+    )
     inflation_authored_share: float = Field(
         default=0.25,
         description="Flag when authored lines fall below this share of total.",

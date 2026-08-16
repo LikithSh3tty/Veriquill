@@ -84,7 +84,9 @@ def test_fork_with_only_downstream_readme_commit_is_flagged(tmp_path):
     commits = [
         CommitSpec(
             message="upstream work",
-            files={"src/core.py": "x = 1\n" * 100},
+            # Comfortably above settings.fork_min_total_loc: the check
+            # deliberately ignores repositories too small to judge.
+            files={"src/core.py": "x = 1\n" * 400},
             when=start,
             author_name="Upstream Author",
             author_email="upstream@example.com",
@@ -110,6 +112,22 @@ def test_fork_with_only_downstream_readme_commit_is_flagged(tmp_path):
 
 def test_non_fork_produces_no_fork_flag(tmp_path):
     ctx = _ctx(tmp_path, "own", organic_history(), metadata={"fork": False})
+    assert check_fork_origin(ctx, _settings(tmp_path)) == []
+
+
+def test_a_trivially_small_repo_is_not_called_a_fork(tmp_path):
+    """Precision guard: a 3-line repo authored by someone else is a real fact,
+    but "fork presented as original work" at HIGH severity overstates it."""
+    commits = [
+        CommitSpec(
+            message="one small commit",
+            files={"README.md": "# hi\n"},
+            when=datetime(2025, 7, 1, tzinfo=timezone.utc),
+            author_name="Someone Else",
+            author_email="someone@example.com",
+        )
+    ]
+    ctx = _ctx(tmp_path, "tiny", commits, metadata={"fork": False})
     assert check_fork_origin(ctx, _settings(tmp_path)) == []
 
 

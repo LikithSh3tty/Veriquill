@@ -28,7 +28,7 @@ def check_fork_origin(ctx: RepoContext, settings: Settings) -> list[Finding]:
     total_insertions = sum(
         f.insertions for c in ctx.commits for f in c.files if not is_vendored(f.path)
     )
-    if total_insertions == 0:
+    if total_insertions < settings.fork_min_total_loc:
         return []
 
     own_share = own_insertions / total_insertions
