@@ -24,6 +24,7 @@ from veriquill.store import (
     create_comparison,
     get_comparison,
     list_rubrics,
+    save_dossier,
     save_rubric,
 )
 
@@ -118,6 +119,12 @@ def dossier(
     report["claims_examined"] = len(claim_set.claims)
     report["claim_errors"] = claim_set.errors
 
+    # Stored as well as printed: ranking reads dossiers from the database, and a
+    # dossier that only ever existed on stdout could never be compared.
+    with _session() as session:
+        record = save_dossier(session, report)
+    typer.echo(f"stored dossier {record.id} for {handle}", err=True)
+
     payload = json.dumps(report, indent=2)
     if output is not None:
         output.write_text(payload, encoding="utf-8")
@@ -189,6 +196,28 @@ def rubric_add(path: Path = typer.Argument(..., help="Rubric JSON file.")) -> No
     with _session() as session:
         save_rubric(session, rubric)
     typer.echo(f"stored rubric {rubric.name!r} version {rubric.version}")
+
+
+@app.command()
+def dossier_import(
+    path: Path = typer.Argument(..., help="A dossier JSON file written by `veriquill dossier`.")
+) -> None:
+    """Store an existing dossier file so it can be ranked.
+
+    `veriquill dossier` stores what it builds. This exists for dossiers produced
+    on another machine, or before this command existed.
+    """
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _fail(f"cannot read {path}: {exc}")
+
+    with _session() as session:
+        try:
+            record = save_dossier(session, payload)
+        except StoreError as exc:
+            _fail(str(exc))
+        typer.echo(f"stored dossier {record.id} for {record.candidate_handle}")
 
 
 @app.command()

@@ -9,12 +9,17 @@ Every finding it emits cites the commit, file, or line that produced it.
 
 ## Status
 
-Milestone M1 (GitHub engines) is implemented: repository ingestion,
-deterministic provenance and authenticity checks, and static code evaluation.
-Findings are advisory. Veriquill never auto-rejects, never auto-hires, and
-never treats a flag as proof of wrongdoing.
+Implemented: repository ingestion, deterministic provenance and authenticity
+checks, static code evaluation (M1); résumé and LinkedIn claim workers (M2);
+reconciliation and the candidate dossier (M3); rubric-weighted ranking with a
+blocking human review gate and an append-only override log (M4); and the
+evaluation harness measuring the checks against hand-labelled cases (M5).
 
-M1 makes no LLM calls. Every finding is deterministic and reproducible.
+Findings are advisory. Veriquill never auto-rejects, never auto-hires, and never
+treats a flag as proof of wrongdoing. No LLM sits on the provenance, code
+evaluation, or ranking path: those are deterministic and reproducible. The only
+optional LLM call refines the phrasing of claims already extracted from a
+candidate's own documents.
 
 ## What Veriquill checks
 
@@ -60,7 +65,47 @@ uvicorn veriquill.api.main:app --reload
 ```
 
 `POST /analyse` with `{"handle": "octocat"}` starts a run, `GET /runs/{run_id}`
-returns it.
+returns it. Rubrics, comparisons, review actions, and exports have endpoints
+mirroring the CLI commands below.
+
+## Comparing candidates
+
+Ranking reads stored dossiers. It never re-analyses anyone, makes no network
+call, and involves no LLM.
+
+```bash
+veriquill rubric-add rubric.json
+veriquill rank --rubric backend-hire --candidate alice --candidate bob
+veriquill review-show 1
+veriquill review-flag 1 --candidate bob --flag 3f2a91c40b7e \
+  --action dismiss --actor "you@example.com" --reason "employer-owned import"
+veriquill review-approve 1 --actor "you@example.com"
+veriquill export-comparison 1 --output comparison.json
+veriquill audit 1
+```
+
+A rubric sets weights over six fixed dimensions — authenticity, code quality,
+claim corroboration, test quality, security, breadth. Unlisted dimensions take
+their default weight, and an unknown dimension name is refused rather than
+ignored.
+
+**A comparison cannot be exported until a named human approves it.** An approval
+covers exactly the revision it saw: any later review action bumps the revision
+and reopens the gate.
+
+**Thin evidence widens the confidence band; it never lowers the score.** A
+dimension nobody could measure is dropped from the weighting and listed with the
+reason it could not be measured, so a candidate with private repositories or a
+non-Python portfolio reads as "we could not tell", not "weak". A candidate
+nothing could be measured for is reported unranked rather than placed last.
+
+**Overrides never edit the machine result.** Dismissals and band overrides are
+recorded with the actor and the reason, and the export carries both what
+Veriquill said and what the human changed. The audit log is append-only:
+replaying it reconstructs any state the comparison has held.
+
+There is no authentication. `--actor` is whatever the caller types; a real
+deployment must supply an authenticated identity.
 
 ## Rate limits
 

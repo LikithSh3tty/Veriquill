@@ -151,6 +151,33 @@ def test_review_show_lists_flags_with_their_ids(workspace):
     assert "abc" in result.stdout
 
 
+def test_a_dossier_file_can_be_imported_and_then_ranked(workspace, tmp_path):
+    run("rubric-add", str(workspace))
+
+    payload = make_dossier()
+    payload["handle"] = "gamma"
+    path = tmp_path / "gamma.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    imported = run("dossier-import", str(path))
+    ranked = run("rank", "--rubric", "backend", "--candidate", "gamma")
+
+    assert imported.exit_code == 0
+    assert "gamma" in imported.stdout
+    assert ranked.exit_code == 0
+    assert "gamma" in ranked.stdout
+
+
+def test_importing_a_dossier_without_a_handle_is_refused(workspace, tmp_path):
+    path = tmp_path / "headless.json"
+    path.write_text(json.dumps({"red_flag_register": []}), encoding="utf-8")
+
+    result = run("dossier-import", str(path))
+
+    assert result.exit_code != 0
+    assert "handle" in result.stdout
+
+
 def test_audit_prints_every_action(workspace):
     run("rubric-add", str(workspace))
     run("rank", "--rubric", "backend", "--candidate", "alpha")
