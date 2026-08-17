@@ -163,3 +163,51 @@ def test_a_clean_candidate_gets_no_manufactured_flags():
     dossier = build_dossier("cand", [], [_corroborated()])
     assert dossier["red_flag_register"] == []
     assert dossier["verdict_band"]["band"] == "evidence supports the claims made"
+
+
+def _analysed_repo() -> RepoResult:
+    return RepoResult(
+        full_name="cand/veriquill",
+        findings=[_finding("provenance.bulk_dump", Severity.HIGH)],
+        evidence=REPO,
+    )
+
+
+def test_every_red_flag_carries_a_stable_id():
+    first = build_dossier("cand", [_analysed_repo()], [])
+    second = build_dossier("cand", [_analysed_repo()], [])
+
+    ids = [flag["flag_id"] for flag in first["red_flag_register"]]
+    assert ids
+    assert all(len(flag_id) == 12 for flag_id in ids)
+    assert ids == [flag["flag_id"] for flag in second["red_flag_register"]]
+
+
+def test_flag_ids_are_unique_within_a_register():
+    dossier = build_dossier("cand", [_analysed_repo(), _analysed_repo()], [])
+
+    ids = [flag["flag_id"] for flag in dossier["red_flag_register"]]
+    assert len(ids) == 2
+    assert len(ids) == len(set(ids))
+
+
+def test_analysis_coverage_counts_repositories_and_claims():
+    broken = RepoResult(full_name="cand/broken", error="clone failed")
+
+    dossier = build_dossier("cand", [_analysed_repo(), broken], [_corroborated()])
+
+    coverage = dossier["analysis_coverage"]
+    assert coverage["repositories_considered"] == 2
+    assert coverage["repositories_analysed"] == 1
+    assert coverage["repositories_with_authored_code"] == 1
+    assert coverage["repositories_deep_analysed"] == 1
+    assert coverage["claims_total"] == 1
+    assert coverage["claims_resolved"] == 1
+
+
+def test_an_unverifiable_claim_lowers_resolution_not_the_claim_count():
+    dossier = build_dossier("cand", [], [_corroborated(), _unverifiable()])
+
+    coverage = dossier["analysis_coverage"]
+    assert coverage["claims_total"] == 2
+    assert coverage["claims_resolved"] == 1

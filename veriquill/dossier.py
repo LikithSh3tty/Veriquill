@@ -8,10 +8,32 @@ the human reading this makes the decision.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from veriquill.findings import Severity
 from veriquill.reconcile.models import Reconciliation, Verdict
+
+
+def _flag_id(flag: dict[str, Any], ordinal: int) -> str:
+    """A stable handle a reviewer can dismiss by reference.
+
+    Derived from the content of the flag, so the same finding keeps the same id
+    across runs and machines. The ordinal only separates two genuinely identical
+    flags inside one register.
+    """
+    material = json.dumps(
+        {
+            "check_id": flag["check_id"],
+            "title": flag["title"],
+            "evidence": flag["evidence"],
+            "ordinal": ordinal,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:12]
 
 
 def _claim_payload(reconciliation: Reconciliation) -> dict[str, Any]:
@@ -117,9 +139,44 @@ def _red_flags(
             )
 
     flags.sort(key=lambda f: (f["rank"], f["check_id"]))
+    seen: dict[str, int] = {}
     for flag in flags:
         flag.pop("rank")
+        key = f"{flag['check_id']}:{flag['title']}"
+        ordinal = seen.get(key, 0)
+        seen[key] = ordinal + 1
+        flag["flag_id"] = _flag_id(flag, ordinal)
     return flags
+
+
+def _analysis_coverage(
+    repo_results: list[Any], reconciliations: list[Reconciliation]
+) -> dict[str, int]:
+    """What the run was actually able to look at.
+
+    Ranking reads a stored dossier, not a live run, so the dossier has to carry
+    its own coverage figures. A repository nobody could analyse lowers coverage;
+    it is never scored as a failing repository.
+    """
+    analysed = [r for r in repo_results if not getattr(r, "error", None)]
+    with_evidence = [r for r in analysed if getattr(r, "evidence", None) is not None]
+
+    return {
+        "repositories_considered": len(repo_results),
+        "repositories_analysed": len(analysed),
+        "repositories_with_authored_code": sum(
+            1 for r in with_evidence if r.evidence.authored_loc > 0
+        ),
+        "repositories_deep_analysed": sum(
+            1 for r in with_evidence if "Python" in r.evidence.languages
+        ),
+        "claims_total": sum(1 for r in reconciliations if r.claim is not None),
+        "claims_resolved": sum(
+            1
+            for r in reconciliations
+            if r.verdict in (Verdict.CORROBORATED, Verdict.CONTRADICTED)
+        ),
+    }
 
 
 def _code_quality_snapshot(repo_results: list[Any]) -> list[dict[str, Any]]:
@@ -251,5 +308,6 @@ def build_dossier(
         "code_quality_snapshot": _code_quality_snapshot(repo_results),
         "gaps_and_open_questions": _open_questions(reconciliations, flags),
         "provenance_and_fairness_notes": notes,
+        "analysis_coverage": _analysis_coverage(repo_results, reconciliations),
         "evidence_coverage": evidence_coverage,
     }
