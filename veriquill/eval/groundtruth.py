@@ -195,3 +195,63 @@ CASES: tuple[LabeledCase, ...] = (
         metadata={"fork": False},
     ),
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ReferenceCohort:
+    """A set of cases with human orderings of them, best first.
+
+    `orders` holds one ordering per rater. Two raters who disagree are more
+    useful than one who does not: the disagreement is what sets the ceiling the
+    tool is measured against.
+    """
+
+    name: str
+    description: str
+    members: tuple[str, ...]
+    orders: tuple[tuple[str, ...], ...]
+
+
+# These orderings are the project's own judgment about its own synthetic cases.
+# They are not an independent expert panel, and the harness says so in its
+# limitations rather than letting a correlation figure imply otherwise. The two
+# orderings differ on one genuinely arguable pair: a committed secret in
+# otherwise organic work, versus a repository whose size is mostly vendored.
+REFERENCE_COHORTS: tuple[ReferenceCohort, ...] = (
+    ReferenceCohort(
+        name="synthetic-spread",
+        description=(
+            "Every labelled case ranked against the others, from clean organic "
+            "work down to a repository the candidate did not author."
+        ),
+        members=(
+            "healthy",
+            "trivial-tests",
+            "hardcoded-secret",
+            "vendored-inflation",
+            "scripted-burst",
+            "bulk-dump",
+            "authored-by-another",
+        ),
+        orders=(
+            (
+                "healthy",
+                "trivial-tests",
+                "hardcoded-secret",
+                "vendored-inflation",
+                "scripted-burst",
+                "bulk-dump",
+                "authored-by-another",
+            ),
+            (
+                "healthy",
+                "trivial-tests",
+                "vendored-inflation",
+                "hardcoded-secret",
+                "scripted-burst",
+                "bulk-dump",
+                "authored-by-another",
+            ),
+        ),
+    ),
+)

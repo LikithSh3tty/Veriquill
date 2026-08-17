@@ -95,6 +95,57 @@ def test_an_unlabelled_check_is_excluded_not_counted_against(tmp_path):
     assert outcome.passed is True
 
 
+def test_every_reference_cohort_names_real_cases():
+    from veriquill.eval.groundtruth import REFERENCE_COHORTS
+
+    known = {case.name for case in CASES}
+    for cohort in REFERENCE_COHORTS:
+        assert set(cohort.members) <= known, f"{cohort.name} names a case that does not exist"
+        for order in cohort.orders:
+            assert set(order) == set(cohort.members), (
+                f"{cohort.name} has an ordering that does not cover its members"
+            )
+
+
+def test_the_ranking_report_correlates_the_tool_order_against_the_references():
+    from tests.test_dimensions import flag, make_dossier
+    from veriquill.eval.groundtruth import ReferenceCohort
+    from veriquill.eval.harness import ranking_report
+
+    def dossier(handle, flags):
+        payload = make_dossier(red_flag_register=flags)
+        payload["handle"] = handle
+        return payload
+
+    dossiers = {
+        "clean": dossier("clean", []),
+        "middling": dossier("middling", [flag("codeeval.no_tests", "medium")]),
+        "poor": dossier("poor", [flag("provenance.bulk_dump", "critical")]),
+    }
+    cohort = ReferenceCohort(
+        name="tiny",
+        description="three cases, one ordering",
+        members=("clean", "middling", "poor"),
+        orders=(("clean", "middling", "poor"),),
+    )
+
+    report = ranking_report(dossiers, (cohort,))[0]
+
+    assert report["tool_order"] == ["clean", "middling", "poor"]
+    assert report["mean_spearman"] == pytest.approx(1.0)
+    assert report["inter_rater_ceiling"]["mean_spearman"] is None
+
+
+def test_the_ranking_report_reaches_the_full_report(tmp_path):
+    report = evaluate(_settings(tmp_path))
+
+    assert "ranking" in report
+    entry = report["ranking"][0]
+    assert entry["tool_order"]
+    assert entry["inter_rater_ceiling"]["raters"] == 2
+    assert "ceiling" in " ".join(report["limitations"]).lower()
+
+
 def test_a_forbidden_check_that_fires_is_still_a_false_alarm(tmp_path):
     from veriquill.eval.harness import CaseOutcome
 

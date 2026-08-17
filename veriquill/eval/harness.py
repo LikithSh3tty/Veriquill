@@ -15,10 +15,15 @@ from typing import Any
 from veriquill.codeeval.engine import run_codeeval
 from veriquill.config import Settings
 from veriquill.context import RepoContext
-from veriquill.eval.groundtruth import CASES, LabeledCase
+from veriquill.dossier import build_dossier
+from veriquill.eval.groundtruth import CASES, REFERENCE_COHORTS, LabeledCase, ReferenceCohort
 from veriquill.eval.metrics import calibration_bins, score_checks
+from veriquill.eval.ranking import agreement, inter_rater_ceiling, ranks_from_order
 from veriquill.findings import Finding
 from veriquill.github.history import read_history
+from veriquill.rank.compare import compare
+from veriquill.reconcile.evidence import RepoEvidence
+from veriquill.rubric import Rubric
 
 
 @dataclass
@@ -29,6 +34,7 @@ class CaseOutcome:
     expected: set[str] = field(default_factory=set)
     forbidden: set[str] = field(default_factory=set)
     findings: list[Finding] = field(default_factory=list)
+    evidence: RepoEvidence | None = None
     error: str | None = None
 
     @property
@@ -67,6 +73,7 @@ class CaseOutcome:
 
 
 def run_case(case: LabeledCase, settings: Settings, workdir: Path) -> CaseOutcome:
+    from veriquill.pipeline import build_evidence
     from veriquill.provenance.engine import run_provenance
 
     outcome = CaseOutcome(
@@ -90,10 +97,67 @@ def run_case(case: LabeledCase, settings: Settings, workdir: Path) -> CaseOutcom
         findings.extend(run_codeeval(ctx, settings))
         outcome.findings = findings
         outcome.fired = {f.check_id for f in findings}
+        # Ranking reads dossiers, and a dossier needs the same evidence view the
+        # pipeline builds, so the eval path builds it the same way.
+        outcome.evidence = build_evidence(ctx, findings)
     except Exception as exc:  # a broken case must not silently pass
         outcome.error = f"{type(exc).__name__}: {exc}"
 
     return outcome
+
+
+def case_dossier(outcome: CaseOutcome) -> dict[str, Any]:
+    """The dossier a case would produce, so ranking can be measured on it."""
+    from veriquill.pipeline import RepoResult
+
+    repo = RepoResult(
+        full_name=f"eval/{outcome.name}",
+        findings=list(outcome.findings),
+        error=outcome.error,
+        evidence=outcome.evidence,
+    )
+    dossier = build_dossier(outcome.name, [repo], [])
+    return dossier
+
+
+def ranking_report(
+    dossiers: dict[str, dict[str, Any]],
+    cohorts: tuple[ReferenceCohort, ...] = REFERENCE_COHORTS,
+) -> list[dict[str, Any]]:
+    """Correlate Veriquill's ordering with each reference ordering.
+
+    The correlation is reported next to the inter-rater ceiling, because a
+    figure without that denominator invites a comparison against a perfection
+    the humans never reached either.
+    """
+    rubric = Rubric.from_dict({"name": "eval-default", "weights": {}})
+    reports: list[dict[str, Any]] = []
+
+    for cohort in cohorts:
+        payloads = [dossiers[name] for name in cohort.members if name in dossiers]
+        result = compare(payloads, rubric)
+        tool_ranks = {row["handle"]: float(row["rank"]) for row in result["ranked"]}
+
+        against = [
+            agreement(tool_ranks, ranks_from_order(list(order))) for order in cohort.orders
+        ]
+        coefficients = [a["spearman"] for a in against if a["spearman"] is not None]
+
+        reports.append(
+            {
+                "cohort": cohort.name,
+                "description": cohort.description,
+                "tool_order": [row["handle"] for row in result["ranked"]],
+                "unranked": [row["handle"] for row in result["unranked"]],
+                "against_reference_orders": against,
+                "mean_spearman": (
+                    round(sum(coefficients) / len(coefficients), 4) if coefficients else None
+                ),
+                "inter_rater_ceiling": inter_rater_ceiling([list(o) for o in cohort.orders]),
+            }
+        )
+
+    return reports
 
 
 def evaluate(
@@ -101,10 +165,16 @@ def evaluate(
 ) -> dict[str, Any]:
     outcomes: list[CaseOutcome] = []
 
+    dossiers: dict[str, dict[str, Any]] = {}
+
     with tempfile.TemporaryDirectory(prefix="veriquill-eval-") as raw:
         workdir = Path(raw)
         for case in cases:
-            outcomes.append(run_case(case, settings, workdir))
+            outcome = run_case(case, settings, workdir)
+            outcomes.append(outcome)
+            # Built inside the temporary directory: the evidence view reads the
+            # working tree, which is gone once this block exits.
+            dossiers[outcome.name] = case_dossier(outcome)
 
     # Score only over checks each case actually labels, in both directions.
     scores = score_checks(
@@ -146,6 +216,7 @@ def evaluate(
         "false_alarms_on_clean_cases": false_alarms,
         "per_check": [score.to_dict() for score in scores.values()],
         "calibration": [b.to_dict() for b in bins if b.count],
+        "ranking": ranking_report(dossiers),
         "cases": [o.to_dict() for o in outcomes],
         "limitations": [
             "These cases are synthetic repositories built to known shapes. They "
@@ -156,7 +227,10 @@ def evaluate(
             "Scoring covers only the checks each case explicitly labels as "
             "expected or forbidden. Checks a case says nothing about are "
             "excluded rather than counted as errors.",
-            "Ranking correlation against expert consensus is not measured; "
-            "there is no ranking step to measure.",
+            "Ranking correlation is measured against orderings this project "
+            "wrote for its own synthetic cases, not against an independent "
+            "expert panel. Read the coefficient against the inter-rater "
+            "ceiling reported beside it, and treat both as provisional until "
+            "real raters order real candidates.",
         ],
     }
