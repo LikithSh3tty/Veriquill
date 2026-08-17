@@ -95,3 +95,92 @@ class RepoFingerprint(Base):
     repo_full_name: Mapped[str] = mapped_column(String(255), index=True)
     candidate_handle: Mapped[str] = mapped_column(String(120), index=True)
     file_hashes: Mapped[list[str]] = mapped_column(JSON)
+
+
+class RubricRecord(Base):
+    """A rubric as it was when a comparison used it.
+
+    Rubrics are versioned rather than edited: a comparison scored last week has
+    to stay reproducible after the recruiter reweights the rubric.
+    """
+
+    __tablename__ = "rubrics"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    weights: Mapped[dict[str, float]] = mapped_column(JSON)
+    minimum_bars: Mapped[dict[str, float]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class DossierRecord(Base):
+    """A dossier exactly as the engines produced it. Written once, never edited."""
+
+    __tablename__ = "dossiers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_handle: Mapped[str] = mapped_column(String(120), index=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    payload_hash: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ComparisonRecord(Base):
+    """One ranked cohort, and whether a human has signed off on it yet."""
+
+    __tablename__ = "comparisons"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rubric_id: Mapped[int] = mapped_column(ForeignKey("rubrics.id"))
+    status: Mapped[str] = mapped_column(String(32), default="pending_review")
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    rubric: Mapped[RubricRecord] = relationship()
+    entries: Mapped[list["ComparisonEntry"]] = relationship(back_populates="comparison")
+
+
+class ComparisonEntry(Base):
+    """One candidate inside a comparison.
+
+    `machine_score` and `machine_rank` are what Veriquill said before any human
+    touched it. Nothing in this codebase updates them after they are written.
+    """
+
+    __tablename__ = "comparison_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    comparison_id: Mapped[int] = mapped_column(ForeignKey("comparisons.id"))
+    dossier_id: Mapped[int] = mapped_column(ForeignKey("dossiers.id"))
+    candidate_handle: Mapped[str] = mapped_column(String(120), index=True)
+    machine_score: Mapped[dict] = mapped_column(JSON)
+    machine_rank: Mapped[int | None] = mapped_column(Integer, default=None)
+
+    comparison: Mapped[ComparisonRecord] = relationship(back_populates="entries")
+    dossier: Mapped[DossierRecord] = relationship()
+
+
+class ReviewAction(Base):
+    """Append-only. Every human intervention, with who made it and why.
+
+    There is no update or delete path for this table anywhere in the codebase.
+    Replaying these rows in order reconstructs any state a comparison has held.
+    """
+
+    __tablename__ = "review_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    comparison_id: Mapped[int] = mapped_column(ForeignKey("comparisons.id"), index=True)
+    entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("comparison_entries.id"), default=None
+    )
+    actor: Mapped[str] = mapped_column(String(120))
+    action: Mapped[str] = mapped_column(String(32))
+    target: Mapped[str | None] = mapped_column(String(255), default=None)
+    reason: Mapped[str] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
