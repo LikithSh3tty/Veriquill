@@ -16,9 +16,8 @@ from veriquill.dossier import build_dossier
 from veriquill.eval.harness import evaluate as run_evaluation
 from veriquill.pipeline import analyse_candidate
 from veriquill.reconcile.engine import reconcile
-from veriquill.review import ReviewError
+from veriquill.review import ReviewError, audit_log, effective_result, export_payload, record_action
 from veriquill.review import approve as approve_comparison
-from veriquill.review import audit_log, effective_result, export_payload, record_action
 from veriquill.rubric import Rubric, RubricError
 from veriquill.store import (
     StoreError,
