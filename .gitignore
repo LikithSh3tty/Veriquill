@@ -49,3 +49,4 @@ demo_*.txt
 # Dashboard build output and dependencies
 ui/node_modules/
 ui/dist/
+ui/.vite/
