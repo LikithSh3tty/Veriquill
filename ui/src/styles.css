@@ -1,0 +1,599 @@
+/*
+ * Veriquill review — "the ledger and the margin".
+ *
+ * Black is the machine, blue is the human. Colour encodes who said a thing,
+ * which is the same distinction the audit log makes: overrides annotate the
+ * machine result, they never replace it. Everything else stays quiet so the
+ * band axis is the one thing the eye lands on.
+ */
+
+@import "@fontsource/zilla-slab/400.css";
+@import "@fontsource/zilla-slab/600.css";
+@import "@fontsource-variable/public-sans";
+@import "@fontsource/jetbrains-mono/400.css";
+
+:root {
+  --paper: #e9edec;
+  --paper-raised: #f3f6f5;
+  --ink: #131a19;
+  --ink-soft: #4a5654;
+  --rule: #c3ccc9;
+  --verified: #1f5f4b;
+  --critical: #7a1f2b;
+  --high: #96502a;
+  --human: #2340b8;
+
+  --display: "Zilla Slab", Georgia, serif;
+  --body: "Public Sans Variable", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --step: 0.5rem;
+  --measure: 68ch;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 calc(var(--step) * 1.5);
+}
+
+h1 {
+  font-size: 1.9rem;
+}
+
+h2 {
+  font-size: 1.15rem;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-style: italic;
+  max-width: var(--measure);
+}
+
+/* --- the gate ------------------------------------------------------------ */
+
+.gate {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: calc(var(--step) * 3);
+  align-items: center;
+  padding: calc(var(--step) * 2) calc(var(--step) * 3);
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper-raised);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.gate--pending {
+  box-shadow: inset 6px 0 0 var(--critical);
+}
+
+.gate--reviewed {
+  box-shadow: inset 6px 0 0 var(--verified);
+}
+
+.gate__state {
+  display: flex;
+  flex-direction: column;
+}
+
+.gate__label {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.gate__detail,
+.gate__consequence {
+  color: var(--ink-soft);
+}
+
+.gate__consequence {
+  margin: 0;
+  max-width: 46ch;
+}
+
+.gate__actor {
+  display: flex;
+  align-items: center;
+  gap: var(--step);
+}
+
+/* --- controls ------------------------------------------------------------ */
+
+label {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+input,
+textarea {
+  font: inherit;
+  color: var(--human);
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: calc(var(--step) * 0.75);
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--paper-raised);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  padding: calc(var(--step) * 0.75) calc(var(--step) * 1.5);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--human);
+  outline-offset: 2px;
+}
+
+/* --- layout -------------------------------------------------------------- */
+
+.app__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: calc(var(--step) * 4);
+  padding: calc(var(--step) * 4) calc(var(--step) * 3);
+  align-items: start;
+}
+
+.app__lede {
+  max-width: var(--measure);
+  color: var(--ink-soft);
+  margin-top: 0;
+}
+
+.app__margin {
+  border-left: 1px solid var(--rule);
+  padding-left: calc(var(--step) * 3);
+}
+
+.app__problem {
+  margin: 0;
+  padding: var(--step) calc(var(--step) * 3);
+  background: var(--critical);
+  color: #fff;
+}
+
+.app__footer {
+  padding: calc(var(--step) * 3);
+  border-top: 1px solid var(--rule);
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+/* --- the band axis: the one thing to look at ----------------------------- */
+
+/* Scale and rows share one column template so a gridline sits exactly under
+   the number that labels it. An axis that is off by a few pixels is an axis
+   that lies about where a candidate sits. */
+.band-axis__scale,
+.band-row__button {
+  display: grid;
+  grid-template-columns: 2rem 8rem minmax(0, 1fr) 9rem;
+  gap: var(--step);
+  align-items: center;
+}
+
+.band-axis__scale {
+  height: 1.4rem;
+  color: var(--ink-soft);
+}
+
+.band-axis__scale-spacer {
+  grid-column: 1 / 3;
+}
+
+.band-axis__scale-track {
+  position: relative;
+  height: 100%;
+  border-bottom: 1px solid var(--rule);
+}
+
+.band-axis__scale-track span {
+  position: absolute;
+  bottom: 0.15rem;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+
+.band-axis__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tie-group {
+  position: relative;
+}
+
+.tie-group--tied {
+  border-left: 2px solid var(--ink);
+  margin-left: -0.75rem;
+  padding-left: calc(0.75rem - 2px);
+}
+
+.tie-group--tied .band-row + .band-row {
+  border-top: none;
+}
+
+.tie-group__note {
+  margin: calc(var(--step) * 1.5) 0 0;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.band-row + .band-row {
+  border-top: 1px solid var(--rule);
+}
+
+.band-row__button {
+  width: 100%;
+  padding: calc(var(--step) * 1.25) 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  font-weight: 400;
+}
+
+.band-row--selected .band-row__button {
+  background: var(--paper-raised);
+  box-shadow: inset 3px 0 0 var(--human);
+}
+
+.band-row__rank {
+  font-family: var(--mono);
+  color: var(--ink-soft);
+}
+
+.band-row__handle {
+  font-family: var(--display);
+  font-size: 1.05rem;
+}
+
+.band-row__track {
+  position: relative;
+  height: 1.75rem;
+}
+
+.band-row__gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+
+.band-row__band {
+  position: absolute;
+  top: 0.5rem;
+  height: 0.75rem;
+  background: var(--ink);
+  opacity: 0.55;
+  animation: draw 320ms ease-out;
+  transform-origin: left;
+}
+
+.band-row--selected .band-row__band {
+  opacity: 1;
+}
+
+.band-row__point {
+  position: absolute;
+  top: -0.375rem;
+  width: 2px;
+  height: 1.5rem;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.band-row__readout {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.band-row__interval {
+  color: var(--ink);
+}
+
+@keyframes draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* --- flags and the margin ------------------------------------------------ */
+
+.review__machine {
+  margin: 0;
+}
+
+.review__override {
+  color: var(--human);
+  border-left: 2px solid var(--human);
+  padding-left: var(--step);
+  margin: var(--step) 0 0;
+}
+
+.review__flags {
+  list-style: none;
+  margin: calc(var(--step) * 2) 0;
+  padding: 0;
+}
+
+.flag {
+  padding: var(--step) 0 var(--step) calc(var(--step) * 1.5);
+  border-left: 3px solid var(--rule);
+  margin-bottom: calc(var(--step) * 1.5);
+}
+
+.flag--critical {
+  border-left-color: var(--critical);
+}
+
+.flag--high {
+  border-left-color: var(--high);
+}
+
+.flag__select {
+  display: flex;
+  align-items: baseline;
+  gap: var(--step);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 1rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.flag__severity {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--critical);
+}
+
+.flag__rationale {
+  margin: calc(var(--step) * 0.5) 0;
+  color: var(--ink-soft);
+}
+
+.flag__evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--ink-soft);
+}
+
+.review__actions {
+  display: flex;
+  gap: var(--step);
+  margin-top: var(--step);
+}
+
+.review__problem {
+  color: var(--critical);
+  font-weight: 600;
+}
+
+/* --- audit log ----------------------------------------------------------- */
+
+.log {
+  margin-top: calc(var(--step) * 4);
+  border-top: 1px solid var(--rule);
+  padding-top: calc(var(--step) * 2);
+}
+
+.log__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.log__rows li {
+  padding: calc(var(--step) * 0.75) 0;
+  border-bottom: 1px dotted var(--rule);
+  color: var(--human);
+  min-width: 0;
+}
+
+.log__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--step);
+  align-items: baseline;
+  margin: 0;
+}
+
+.log__what {
+  font-weight: 600;
+}
+
+.log__who {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.log__why {
+  margin: 0.15rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.log__actor {
+  color: var(--ink-soft);
+}
+
+.log__when {
+  color: var(--ink-soft);
+}
+
+.unranked {
+  margin-top: calc(var(--step) * 4);
+  border-top: 1px solid var(--rule);
+  padding-top: calc(var(--step) * 2);
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+@media (max-width: 60rem) {
+  .app__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app__margin {
+    border-left: none;
+    border-top: 1px solid var(--rule);
+    padding-left: 0;
+    padding-top: calc(var(--step) * 3);
+  }
+
+  .band-axis__scale,
+  .band-row__button {
+    grid-template-columns: 1.5rem 5rem minmax(0, 1fr);
+  }
+
+  .band-row__readout {
+    grid-column: 2 / -1;
+    flex-direction: row;
+    gap: var(--step);
+  }
+
+  .band-axis__scale-spacer {
+    grid-column: 1 / 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .band-row__band {
+    animation: none;
+  }
+}
+
+/* --- what was measured --------------------------------------------------- */
+
+.review__subhead {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: calc(var(--step) * 3) 0 var(--step);
+  padding-bottom: calc(var(--step) * 0.5);
+  border-bottom: 1px solid var(--rule);
+}
+
+.dimensions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dimension + .dimension {
+  margin-top: calc(var(--step) * 1.5);
+}
+
+.dimension__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--step);
+  margin: 0;
+}
+
+.dimension__name {
+  font-family: var(--display);
+  font-size: 0.95rem;
+}
+
+.dimension__weight {
+  color: var(--ink-soft);
+}
+
+.dimension__score {
+  margin-left: auto;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dimension__absent {
+  margin-left: auto;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.dimension__breach {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--critical);
+}
+
+.dimension__track {
+  display: block;
+  height: 3px;
+  margin: calc(var(--step) * 0.5) 0;
+  background: var(--rule);
+}
+
+.dimension__bar {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.dimension__basis {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}

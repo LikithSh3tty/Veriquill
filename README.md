@@ -109,6 +109,33 @@ replaying it reconstructs any state the comparison has held.
 There is no authentication. `--actor` is whatever the caller types; a real
 deployment must supply an authenticated identity.
 
+## Review dashboard
+
+A React dashboard for the human review gate lives in `ui/`. It reads the API and
+records decisions; it holds no scoring logic of its own.
+
+```bash
+uvicorn veriquill.api.main:app --reload   # terminal one
+cd ui && npm install && npm run dev       # terminal two
+```
+
+Open `http://localhost:5173/?comparison=1`. The dev server proxies `/api` to the
+API on port 8000.
+
+Every candidate's confidence band is drawn on one shared axis, so where two bands
+overlap you can see that the evidence does not separate those candidates — tied
+candidates are bracketed together rather than listed in an order that would imply
+a difference. Colour marks who said what: the machine's numbers are in ink, and
+every human dismissal or override is written beside them in blue, the same way
+the audit log records them without touching the machine result.
+
+```bash
+cd ui
+npm test        # component and API-client tests
+npm run build   # production bundle
+npm run lint    # typecheck
+```
+
 ## Fairness and compliance
 
 Veriquill treats itself as an automated employment decision tool and ships the
