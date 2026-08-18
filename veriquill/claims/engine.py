@@ -18,6 +18,7 @@ from veriquill.claims.models import Claim, ClaimKind
 from veriquill.claims.refine import ClaimRefiner
 from veriquill.claims.resume import parse_resume
 from veriquill.config import Settings
+from veriquill.fairness.signals import redact_document
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,14 @@ class ClaimSet:
     claims: list[Claim] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     refined: bool = False
+    redactions: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "claim_count": len(self.claims),
             "refined_by_model": self.refined,
             "errors": list(self.errors),
+            "redactions": list(self.redactions),
             "disclaimer": (
                 "These are the candidate's own statements, not verified facts. "
                 "They carry weight only once reconciled against evidence."
@@ -96,6 +99,18 @@ def collect_claims(
     if resume is not None:
         try:
             document = load_document(Path(resume))
+            # Redaction happens before parsing and before the refiner, so no
+            # protected attribute reaches a claim, a model, or a log.
+            document, removed = redact_document(document)
+            result.redactions.extend(
+                {
+                    "category": match.category,
+                    "line": match.line,
+                    "document": match.document,
+                    "note": match.describe(),
+                }
+                for match in removed
+            )
             structural = parse_resume(document)
             collected.extend(structural)
 

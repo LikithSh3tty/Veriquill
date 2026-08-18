@@ -135,3 +135,49 @@ def test_different_statements_from_one_line_are_both_kept(tmp_path):
     ]
 
     assert len(_dedupe(claims)) == 2
+
+
+def test_sensitive_fields_are_redacted_before_any_claim_is_built(tmp_path):
+    """A protected attribute must not survive into claims, models, or logs."""
+    resume = tmp_path / "cv.txt"
+    resume.write_text(
+        "\n".join(
+            [
+                "Alice Example",
+                "Date of Birth: 14 March 1998",
+                "Gender: Female",
+                "",
+                "SKILLS",
+                "Python, PostgreSQL",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = collect_claims(_settings(tmp_path), resume=resume)
+
+    blob = json.dumps(result.to_dict())
+    assert "1998" not in blob
+    assert "Female" not in blob
+    assert result.redactions
+    assert {r["category"] for r in result.redactions} == {"date_of_birth", "gender"}
+
+
+def test_a_redaction_record_never_repeats_the_value_it_removed(tmp_path):
+    resume = tmp_path / "cv.txt"
+    resume.write_text("Religion: Hindu\n\nSKILLS\nGo\n", encoding="utf-8")
+
+    result = collect_claims(_settings(tmp_path), resume=resume)
+
+    assert result.redactions
+    assert "Hindu" not in json.dumps(result.redactions)
+    assert result.redactions[0]["line"] == 1
+
+
+def test_a_clean_resume_records_no_redactions(tmp_path):
+    resume = tmp_path / "cv.txt"
+    resume.write_text("SKILLS\nPython, Kubernetes\n", encoding="utf-8")
+
+    result = collect_claims(_settings(tmp_path), resume=resume)
+
+    assert result.redactions == []
