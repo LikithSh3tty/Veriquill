@@ -143,3 +143,23 @@ export async function fetchAudit(id: number): Promise<AuditRow[]> {
 export async function fetchExport(id: number): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>(`/comparisons/${id}/export`);
 }
+
+export type DossierPayload = {
+  handle: string;
+  red_flag_register: {
+    flag_id: string;
+    check_id: string;
+    severity: string;
+    title: string;
+    rationale: string;
+    confidence: number;
+    evidence: { repo?: string | null; path?: string | null; detail?: string | null }[];
+  }[];
+};
+
+export async function fetchDossiers(id: number): Promise<Record<string, DossierPayload>> {
+  const payload = await request<{ dossiers: Record<string, DossierPayload> }>(
+    `/comparisons/${id}/dossiers`,
+  );
+  return payload.dossiers;
+}

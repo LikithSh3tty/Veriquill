@@ -155,3 +155,34 @@ def test_an_unknown_rubric_is_a_400_not_a_crash(tmp_path, monkeypatch):
     assert "ghost" in response.json()["detail"]
 
     get_settings.cache_clear()
+
+
+def test_a_comparison_exposes_the_red_flags_a_reviewer_must_act_on(tmp_path, monkeypatch):
+    """The review screen dismisses flags by id, so it has to be able to read them."""
+    from veriquill.config import get_settings
+    from veriquill.rubric import DIMENSIONS
+
+    client = _seeded_client(tmp_path, monkeypatch)
+
+    client.post("/rubrics", json={"name": "backend", "weights": {d: 1.0 for d in DIMENSIONS}})
+    created = client.post("/comparisons", json={"rubric": "backend", "candidates": ["alpha"]})
+    comparison_id = created.json()["comparison_id"]
+
+    response = client.get(f"/comparisons/{comparison_id}/dossiers")
+
+    assert response.status_code == 200
+    flags = response.json()["dossiers"]["alpha"]["red_flag_register"]
+    assert flags[0]["flag_id"] == "abc"
+    assert flags[0]["evidence"]
+
+    get_settings.cache_clear()
+
+
+def test_dossiers_for_an_unknown_comparison_are_a_404(tmp_path, monkeypatch):
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    assert client.get("/comparisons/404/dossiers").status_code == 404
+
+    get_settings.cache_clear()

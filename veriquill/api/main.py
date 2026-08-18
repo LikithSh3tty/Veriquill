@@ -188,6 +188,28 @@ def export_endpoint(comparison_id: int) -> dict[str, Any]:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@app.get("/comparisons/{comparison_id}/dossiers")
+def read_dossiers(comparison_id: int) -> dict[str, Any]:
+    """The dossiers behind a comparison, keyed by candidate.
+
+    The review screen acts on individual flags by id, so it has to be able to
+    read the register those ids come from. The ranked result deliberately
+    carries scores rather than findings, so this is a separate call.
+    """
+    with _session() as session:
+        try:
+            comparison = get_comparison(session, comparison_id)
+        except StoreError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {
+            "comparison_id": comparison.id,
+            "dossiers": {
+                entry.candidate_handle: entry.dossier.payload
+                for entry in sorted(comparison.entries, key=lambda e: e.id)
+            },
+        }
+
+
 @app.get("/comparisons/{comparison_id}/audit")
 def audit_endpoint(comparison_id: int) -> dict[str, Any]:
     with _session() as session:
