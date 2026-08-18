@@ -33,9 +33,12 @@ _VALUE = "(?!\\[redacted)\\S.*"
 CATEGORIES: dict[str, tuple[re.Pattern[str], ...]] = {
     "date_of_birth": (
         re.compile(
-            r"\b(date\s+of\s+birth|d\.?o\.?b\.?|birth\s*date)" + _LABEL + _VALUE, re.IGNORECASE
+            r"\b(date\s+of\s+birth|d\.?o\.?b\.?|birth\s*date)" + _LABEL + _VALUE,
+            re.IGNORECASE,
         ),
-        re.compile(r"\b(born)\s+(?:on\s+)?\d{1,2}[\s/.-]+\w+[\s/.-]+\d{2,4}", re.IGNORECASE),
+        re.compile(
+            r"\b(born)\s+(?:on\s+)?\d{1,2}[\s/.-]+\w+[\s/.-]+\d{2,4}", re.IGNORECASE
+        ),
     ),
     "age": (
         re.compile(r"\b(age)" + _LABEL + r"\d{1,3}\b", re.IGNORECASE),
@@ -67,7 +70,10 @@ CATEGORIES: dict[str, tuple[re.Pattern[str], ...]] = {
         ),
     ),
     "photo": (
-        re.compile(r"\b(photograph|passport\s+size\s+photo)(?!\s*:?\s*\[redacted).*", re.IGNORECASE),
+        re.compile(
+            r"\b(photograph|passport\s+size\s+photo)(?!\s*:?\s*\[redacted).*",
+            re.IGNORECASE,
+        ),
         re.compile(r"\b(photo)" + _LABEL + _VALUE, re.IGNORECASE),
     ),
 }
@@ -92,7 +98,9 @@ class SensitiveMatch:
         )
 
 
-def scan_lines(lines: Sequence[str] | Iterable[str], document: str = "resume") -> list[SensitiveMatch]:
+def scan_lines(
+    lines: Sequence[str] | Iterable[str], document: str = "resume"
+) -> list[SensitiveMatch]:
     """Find every labelled protected-attribute field, in line order."""
     matches: list[SensitiveMatch] = []
 
