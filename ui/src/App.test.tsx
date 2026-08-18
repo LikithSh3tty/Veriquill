@@ -33,7 +33,7 @@ const flagFor = (handle: string) => ({
 });
 
 function stubApi(overrides: Record<string, unknown> = {}) {
-  const fetcher = vi.fn(async (url: string) => {
+  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => {
     const body =
       url.endsWith("/audit")
         ? { audit_log: [] }
@@ -105,10 +105,10 @@ describe("App", () => {
 
     await waitFor(() => {
       const posted = fetcher.mock.calls.find(
-        ([, init]) => init?.method === "POST" && String(init.body).includes("flag_dismiss"),
+        ([, init]) => init?.method === "POST" && String(init?.body).includes("flag_dismiss"),
       );
       expect(posted).toBeTruthy();
-      expect(JSON.parse(String(posted![1].body))).toMatchObject({
+      expect(JSON.parse(String(posted![1]?.body))).toMatchObject({
         candidate: "bob",
         target: "bob-flag",
         reason: "employer-owned import",

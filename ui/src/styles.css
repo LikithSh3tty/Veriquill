@@ -518,3 +518,82 @@ button:disabled {
     animation: none;
   }
 }
+
+/* --- what was measured --------------------------------------------------- */
+
+.review__subhead {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: calc(var(--step) * 3) 0 var(--step);
+  padding-bottom: calc(var(--step) * 0.5);
+  border-bottom: 1px solid var(--rule);
+}
+
+.dimensions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dimension + .dimension {
+  margin-top: calc(var(--step) * 1.5);
+}
+
+.dimension__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--step);
+  margin: 0;
+}
+
+.dimension__name {
+  font-family: var(--display);
+  font-size: 0.95rem;
+}
+
+.dimension__weight {
+  color: var(--ink-soft);
+}
+
+.dimension__score {
+  margin-left: auto;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dimension__absent {
+  margin-left: auto;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.dimension__breach {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--critical);
+}
+
+.dimension__track {
+  display: block;
+  height: 3px;
+  margin: calc(var(--step) * 0.5) 0;
+  background: var(--rule);
+}
+
+.dimension__bar {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.dimension__basis {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}

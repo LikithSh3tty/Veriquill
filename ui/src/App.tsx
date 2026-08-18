@@ -162,6 +162,7 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
               row={current}
               flags={flags[current.handle] ?? []}
               actor={actor}
+              weights={result?.rubric?.weights ?? {}}
               onAction={handleAction}
             />
           ) : (

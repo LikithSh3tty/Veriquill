@@ -11,6 +11,7 @@
 import { useState } from "react";
 
 import type { RankedRow, ReviewAction } from "../api";
+import { DimensionTable } from "./DimensionTable";
 
 export type Flag = {
   flag_id: string;
@@ -26,10 +27,11 @@ type Props = {
   row: RankedRow;
   flags: Flag[];
   actor: string;
+  weights?: Record<string, number>;
   onAction: (action: ReviewAction) => Promise<void>;
 };
 
-export function ReviewPanel({ row, flags, actor, onAction }: Props) {
+export function ReviewPanel({ row, flags, actor, weights = {}, onAction }: Props) {
   const [reason, setReason] = useState("");
   const [target, setTarget] = useState(flags[0]?.flag_id ?? "");
   const [problem, setProblem] = useState<string | null>(null);
@@ -81,6 +83,14 @@ export function ReviewPanel({ row, flags, actor, onAction }: Props) {
         ) : null}
       </header>
 
+      <h3 className="review__subhead">What was measured</h3>
+      <DimensionTable
+        dimensions={row.score.dimensions}
+        weights={weights}
+        breaches={row.score.bar_breaches}
+      />
+
+      <h3 className="review__subhead">Flags</h3>
       {flags.length === 0 ? (
         <p className="empty">No flags were raised for this candidate.</p>
       ) : (
