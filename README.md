@@ -12,8 +12,10 @@ Every finding it emits cites the commit, file, or line that produced it.
 Implemented: repository ingestion, deterministic provenance and authenticity
 checks, static code evaluation (M1); résumé and LinkedIn claim workers (M2);
 reconciliation and the candidate dossier (M3); rubric-weighted ranking with a
-blocking human review gate and an append-only override log (M4); and the
-evaluation harness measuring the checks against hand-labelled cases (M5).
+blocking human review gate and an append-only override log (M4); the
+evaluation harness measuring the checks against hand-labelled cases and the
+ranking against reference orderings (M5); and the fairness controls, bias audit,
+and disclosure pack (M6).
 
 Findings are advisory. Veriquill never auto-rejects, never auto-hires, and never
 treats a flag as proof of wrongdoing. No LLM sits on the provenance, code
