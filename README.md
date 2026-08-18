@@ -35,6 +35,17 @@ lint compliance, test quality measured by assertion meaningfulness rather than
 test count, and modules nothing imports. Python is analysed in depth; other
 languages are detected and counted, and the output says so explicitly.
 
+**Design review (optional, off by default).** Set `VERIQUILL_CODE_REVIEW_ENABLED=true`
+to let a model phrase the judgment static analysis cannot reach — responsibilities
+that are tangled, decisions duplicated across modules, error handling that hides
+failures. It runs under hard constraints: every observation must quote a line that
+appears verbatim at the file and line it cites, or it is discarded; its severity is
+capped at medium and its confidence at 0.5, so a judgment can never outrank
+something that was measured; it is told not to report metrics, because every number
+in the dossier comes from static analysis; and it only ever sees authored code,
+never vendored trees. With the setting off, or with no credentials resolved, the
+pipeline is fully deterministic.
+
 Every finding carries at least one evidence reference. That is a structural
 guarantee, not a convention: a finding with empty evidence cannot be
 constructed.

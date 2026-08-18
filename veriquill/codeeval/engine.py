@@ -10,6 +10,7 @@ import logging
 
 from veriquill.codeeval.complexity import check_complexity
 from veriquill.codeeval.detect import DEEPLY_ANALYSED, LanguageProfile, profile_repo
+from veriquill.codeeval.reviewer import DesignReviewer
 from veriquill.codeeval.security import check_security
 from veriquill.codeeval.structure import check_structure
 from veriquill.codeeval.style import check_style
@@ -63,6 +64,15 @@ def run_codeeval(ctx: RepoContext, settings: Settings) -> list[Finding]:
             findings.extend(analyser(ctx, profile, settings))
         except Exception:
             logger.exception("analyser %s failed on %s", analyser.__name__, ctx.full_name)
+
+    # Judgment runs last and only when switched on, so the deterministic
+    # findings above are never contingent on a model being reachable.
+    reviewer = DesignReviewer(settings)
+    if reviewer.available:
+        try:
+            findings.extend(reviewer.review(ctx, profile))
+        except Exception:
+            logger.exception("design review failed on %s", ctx.full_name)
 
     note = coverage_note(profile, ctx.full_name)
     if note is not None:

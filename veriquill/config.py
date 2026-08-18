@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     claim_refinement_enabled: bool = True
     claim_max_tokens: int = 16000
 
+    # Optional design review (off by default; every metric stays deterministic)
+    code_review_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a model phrase design judgment over authored Python. It cites "
+            "or is discarded, and never reports a metric."
+        ),
+    )
+    code_review_model: str = "claude-sonnet-5"
+    code_review_max_tokens: int = 8000
+
     # Rate limiting
     rate_limit_floor: int = Field(
         default=100,

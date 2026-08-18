@@ -172,3 +172,25 @@ def test_assert_outside_a_test_file_is_still_reported(tmp_path):
 
     ids = {f.check_id for f in check_security(_ctx(tmp_path), profile, _settings(tmp_path))}
     assert "codeeval.security.b101" in ids
+
+
+def test_the_design_reviewer_is_not_called_while_it_is_switched_off(tmp_path):
+    """The deterministic path must stay deterministic unless asked otherwise."""
+    from veriquill.codeeval.engine import run_codeeval
+
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "app.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    ctx = RepoContext(
+        full_name="cand/app",
+        path=root,
+        candidate_handle="cand",
+        identities=frozenset({"cand"}),
+        commits=[],
+        metadata={},
+    )
+    settings = Settings(github_token="t", data_dir=tmp_path / "data")
+
+    findings = run_codeeval(ctx, settings)
+
+    assert all(f.check_id != "codeeval.design_review" for f in findings)
