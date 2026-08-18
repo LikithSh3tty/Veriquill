@@ -155,6 +155,10 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
         <aside className="app__margin">
           {current ? (
             <ReviewPanel
+              // Remounting per candidate clears the flag selection and the reason
+              // box. A reason written about one person must never be submitted
+              // against another.
+              key={current.handle}
               row={current}
               flags={flags[current.handle] ?? []}
               actor={actor}
@@ -172,13 +176,18 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
               <ol className="log__rows">
                 {audit.map((entry, index) => (
                   <li key={index}>
-                    <span className="mono log__when">{entry.created_at?.slice(0, 19)}</span>
-                    <span className="log__actor">{entry.actor}</span>
-                    <span className="log__what">{entry.action.replace("_", " ")}</span>
-                    {entry.candidate ? (
-                      <span className="log__who">{entry.candidate}</span>
-                    ) : null}
-                    <span className="log__why">{entry.reason}</span>
+                    <p className="log__head">
+                      <span className="mono log__when">
+                        {entry.created_at?.slice(0, 19).replace("T", " ")}
+                      </span>
+                      <span className="log__what">{entry.action.replace(/_/g, " ")}</span>
+                      {entry.candidate ? (
+                        <span className="log__who">{entry.candidate}</span>
+                      ) : null}
+                    </p>
+                    <p className="log__why">
+                      {entry.reason} <span className="log__actor">— {entry.actor}</span>
+                    </p>
                   </li>
                 ))}
               </ol>
