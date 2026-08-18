@@ -45,3 +45,7 @@ eval_report.json
 dossier.json
 claims_tmp.json
 demo_*.txt
+
+# Dashboard build output and dependencies
+ui/node_modules/
+ui/dist/
