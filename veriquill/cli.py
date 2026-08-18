@@ -14,6 +14,8 @@ from veriquill.config import get_settings
 from veriquill.db import init_db, make_engine, make_session_factory
 from veriquill.dossier import build_dossier
 from veriquill.eval.harness import evaluate as run_evaluation
+from veriquill.fairness.audit import audit_comparison
+from veriquill.fairness.disclosure import build_disclosure, render_markdown
 from veriquill.pipeline import analyse_candidate
 from veriquill.reconcile.engine import reconcile
 from veriquill.review import ReviewError, audit_log, effective_result, export_payload, record_action
@@ -389,6 +391,61 @@ def export_comparison(
         typer.echo(f"wrote {output}")
     else:
         typer.echo(text)
+
+
+@app.command()
+def fairness_report(
+    comparison_id: int = typer.Argument(..., help="Comparison id."),
+    groups: Path = typer.Option(
+        None,
+        "--groups",
+        help=(
+            "JSON object mapping candidate handle to a group label from your own "
+            "records. Veriquill never infers one."
+        ),
+    ),
+    top_k: int = typer.Option(1, "--top-k", help="How many candidates count as selected."),
+    output: Path = typer.Option(None, "--output", "-o", help="Write the pack here."),
+    output_format: str = typer.Option("json", "--format", help="json or markdown."),
+) -> None:
+    """Audit a comparison for disparate impact and emit the disclosure pack.
+
+    Without group labels the audit still reports evidence-coverage disparity,
+    which needs no protected data and is the most likely route to disparate
+    impact in this design.
+    """
+    if output_format not in ("json", "markdown"):
+        _fail("--format must be json or markdown")
+
+    labels: dict[str, str] = {}
+    if groups is not None:
+        try:
+            labels = json.loads(groups.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            _fail(f"cannot read {groups}: {exc}")
+
+    with _session() as session:
+        try:
+            comparison = get_comparison(session, comparison_id)
+        except StoreError as exc:
+            _fail(str(exc))
+
+        result = effective_result(session, comparison)
+        payloads = {
+            entry.candidate_handle: entry.dossier.payload for entry in comparison.entries
+        }
+        report = audit_comparison(result, groups=labels, top_k=top_k, dossiers=payloads)
+        pack = build_disclosure(audit=report)
+
+    text = render_markdown(pack) if output_format == "markdown" else json.dumps(pack, indent=2)
+    if output is not None:
+        output.write_text(text, encoding="utf-8")
+        typer.echo(f"wrote {output}")
+    else:
+        typer.echo(text)
+
+    for note in report["notes"]:
+        typer.echo(f"note: {note}", err=True)
 
 
 @app.command()

@@ -187,3 +187,51 @@ def test_audit_prints_every_action(workspace):
 
     assert result.exit_code == 0
     assert "approve" in result.stdout
+
+
+def test_fairness_report_audits_a_comparison_and_writes_the_pack(workspace, tmp_path):
+    run("rubric-add", str(workspace))
+    run("rank", "--rubric", "backend", "--candidate", "alpha", "--candidate", "beta")
+
+    out = tmp_path / "fairness.json"
+    result = run("fairness-report", "1", "--output", str(out))
+
+    assert result.exit_code == 0
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["bias_audit"]["cohort_size"] == 2
+    assert payload["what_is_excluded"]
+    assert payload["bias_audit"]["groups_supplied"] is False
+
+
+def test_fairness_report_accepts_recruiter_supplied_group_labels(workspace, tmp_path):
+    run("rubric-add", str(workspace))
+    run("rank", "--rubric", "backend", "--candidate", "alpha", "--candidate", "beta")
+
+    labels = tmp_path / "groups.json"
+    labels.write_text(json.dumps({"alpha": "A", "beta": "B"}), encoding="utf-8")
+    out = tmp_path / "fairness.json"
+
+    result = run("fairness-report", "1", "--groups", str(labels), "--output", str(out))
+
+    assert result.exit_code == 0
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["bias_audit"]["groups_supplied"] is True
+    assert {row["group"] for row in payload["bias_audit"]["selection"]} == {"A", "B"}
+
+
+def test_fairness_report_can_write_markdown(workspace, tmp_path):
+    run("rubric-add", str(workspace))
+    run("rank", "--rubric", "backend", "--candidate", "alpha")
+
+    out = tmp_path / "fairness.md"
+    result = run("fairness-report", "1", "--output", str(out), "--format", "markdown")
+
+    assert result.exit_code == 0
+    assert out.read_text(encoding="utf-8").startswith("# Veriquill disclosure pack")
+
+
+def test_fairness_report_refuses_an_unknown_comparison(workspace):
+    result = run("fairness-report", "99")
+
+    assert result.exit_code != 0
+    assert "99" in result.stdout

@@ -107,6 +107,46 @@ replaying it reconstructs any state the comparison has held.
 There is no authentication. `--actor` is whatever the caller types; a real
 deployment must supply an authenticated identity.
 
+## Fairness and compliance
+
+Veriquill treats itself as an automated employment decision tool and ships the
+artifacts that position demands.
+
+**Protected attributes are removed at the door.** Resumes in many countries state
+date of birth, marital status, nationality, religion, caste, blood group, or
+attach a photograph. Those fields are detected by label and redacted before
+parsing, before any model call, and before anything is stored, so they never
+reach a claim, a score, a log, or the recruiter's screen. The dossier records
+that a field was present and removed, and never what it contained.
+
+**The bias audit runs with or without group labels.**
+
+```bash
+veriquill fairness-report 1 --output fairness.json
+veriquill fairness-report 1 --groups groups.json --top-k 3 --format markdown -o pack.md
+```
+
+Veriquill never infers a protected attribute, so selection-rate arithmetic needs
+group labels supplied from your own records (`{"alice": "A", "bob": "B"}`). Given
+them, it reports selection rate per group, the impact ratio against the
+four-fifths rule, and per-check flag rates, because an ordering can look even
+while the reasons behind it do not.
+
+Without labels it still audits what needs no protected data at all: how evenly
+evidence could be gathered across the cohort. That is the most likely route to
+disparate impact in this design, since a portfolio in a language Veriquill does
+not analyse in depth, or one held in private repositories, yields less evidence
+through no fault of the candidate.
+
+**The disclosure pack is generated from the running code**, not maintained by
+hand: measured dimensions come from the rubric and excluded attributes from the
+scanner itself, so neither can drift out of date. It states what is measured and
+on what evidence, what is excluded, how the human gate and audit log work, and
+what the tool must never do.
+
+This is a self-audit artifact. Jurisdictions such as New York City require an
+independent bias audit, and nothing here replaces one.
+
 ## Rate limits
 
 Veriquill requires a GitHub token and refuses to run without one:
