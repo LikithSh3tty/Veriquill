@@ -158,16 +158,19 @@ CASES: tuple[LabeledCase, ...] = (
     ),
     LabeledCase(
         name="authored-by-another",
-        description="Every commit belongs to a different author.",
-        build=_foreign,
-        expected=frozenset(
-            {
-                "codeeval.no_tests",
-                "provenance.low_contribution",
-                "provenance.fork_presented_as_original",
-            }
+        description=(
+            "Every commit belongs to a different author, on a repository GitHub "
+            "reports as original."
         ),
-        forbidden=frozenset({"provenance.cadence_burst"}),
+        build=_foreign,
+        expected=frozenset({"codeeval.no_tests", "provenance.low_contribution"}),
+        # The label used to expect a fork flag here. It was wrong: nothing in the
+        # evidence establishes an upstream author when GitHub says the repository
+        # is not a fork, and the accusation lands hardest on candidates who simply
+        # renamed their account or commit under a different git identity.
+        forbidden=frozenset(
+            {"provenance.cadence_burst", "provenance.fork_presented_as_original"}
+        ),
         metadata={"fork": False},
     ),
     LabeledCase(

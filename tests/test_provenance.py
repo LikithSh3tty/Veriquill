@@ -222,3 +222,55 @@ def test_engine_sorts_most_severe_first(tmp_path):
 def test_healthy_repo_produces_no_flags_at_all(tmp_path):
     ctx = _ctx(tmp_path, "healthy", organic_history(), metadata={"fork": False})
     assert run_provenance(ctx, _settings(tmp_path), known_fingerprints={}) == []
+
+
+def test_an_unforked_repository_is_never_called_a_fork(tmp_path):
+    """The most damaging overstatement this tool could make.
+
+    A repository GitHub reports as original, whose commits carry an identity we
+    cannot match, supports exactly one claim: we could not attribute the work.
+    There is no upstream author to point at, and `low_contribution` already
+    reports the underlying fact.
+    """
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    commits = [
+        CommitSpec(
+            message=f"work {i}",
+            files={f"src/mod_{i}.py": "x = 1\n" * 200},
+            when=start + timedelta(days=i),
+            author_name="lucifer360",
+            author_email="lucifer360@example.com",
+        )
+        for i in range(6)
+    ]
+    ctx = _ctx(tmp_path, "renamed", commits, metadata={"fork": False})
+
+    findings = check_fork_origin(ctx, _settings(tmp_path))
+
+    assert findings == [], "a repository that is not a fork must not be called one"
+
+
+def test_a_real_fork_is_still_flagged(tmp_path):
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    commits = [
+        CommitSpec(
+            message=f"upstream {i}",
+            files={f"src/core_{i}.py": "y = 1\n" * 200},
+            when=start + timedelta(days=i),
+            author_name="Upstream Author",
+            author_email="upstream@example.com",
+        )
+        for i in range(6)
+    ]
+    ctx = _ctx(
+        tmp_path,
+        "forked",
+        commits,
+        metadata={"fork": True, "parent": {"full_name": "upstream/core"}},
+    )
+
+    findings = check_fork_origin(ctx, _settings(tmp_path))
+
+    assert findings
+    assert findings[0].check_id == "provenance.fork_presented_as_original"
+    assert "upstream/core" in findings[0].rationale
