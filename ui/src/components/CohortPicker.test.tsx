@@ -110,3 +110,30 @@ describe("CohortPicker", () => {
     expect(screen.getByText(/rubric-add/i)).toBeInTheDocument();
   });
 });
+
+describe("CohortPicker when the roster arrives after mount", () => {
+  it("uses the first rubric that turned up, not the empty list it started with", async () => {
+    const user = userEvent.setup();
+    const onRank = vi.fn().mockResolvedValue(9);
+    const onRanked = vi.fn();
+
+    // The review screen renders before the roster request resolves, which is
+    // exactly when the picker used to freeze on "no rubric".
+    const { rerender } = render(
+      <CohortPicker candidates={[]} rubrics={[]} onRank={onRank} onRanked={onRanked} />,
+    );
+    rerender(
+      <CohortPicker
+        candidates={CANDIDATES}
+        rubrics={[{ name: "backend-hire" }]}
+        onRank={onRank}
+        onRanked={onRanked}
+      />,
+    );
+
+    await user.click(screen.getByLabelText(/alice/));
+    await user.click(screen.getByRole("button", { name: /rank/i }));
+
+    await waitFor(() => expect(onRank).toHaveBeenCalledWith("backend-hire", ["alice"]));
+  });
+});

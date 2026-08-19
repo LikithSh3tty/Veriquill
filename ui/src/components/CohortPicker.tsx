@@ -20,7 +20,10 @@ type Props = {
 
 export function CohortPicker({ candidates = [], rubrics = [], onRank, onRanked }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
-  const [rubric, setRubric] = useState(rubrics[0]?.name ?? "");
+  // The roster loads after this renders, so the choice cannot be frozen at
+  // mount: hold only an explicit pick and fall back to whatever arrived.
+  const [picked, setPicked] = useState<string | null>(null);
+  const rubric = picked ?? rubrics[0]?.name ?? "";
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -72,7 +75,7 @@ export function CohortPicker({ candidates = [], rubrics = [], onRank, onRanked }
           <select
             id="rubric"
             value={rubric}
-            onChange={(event) => setRubric(event.target.value)}
+            onChange={(event) => setPicked(event.target.value)}
           >
             {rubrics.map((r) => (
               <option key={r.name} value={r.name}>
