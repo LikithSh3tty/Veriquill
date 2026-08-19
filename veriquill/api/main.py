@@ -33,6 +33,7 @@ from veriquill.intake import (
     JobStore,
     stage_upload,
 )
+from veriquill.jobspec import derive_rubric, read_job_description
 from veriquill.pipeline import analyse_candidate, build_candidate_dossier
 from veriquill.review import ReviewError, audit_log, effective_result, export_payload, record_action
 from veriquill.review import approve as approve_comparison
@@ -88,6 +89,11 @@ class ReviewRequest(BaseModel):
 
 class ApprovalRequest(BaseModel):
     actor: str
+
+
+class JobDescriptionRequest(BaseModel):
+    name: str
+    text: str
 
 
 @app.get("/health")
@@ -302,6 +308,28 @@ async def add_candidate(
 
     background.add_task(_run_intake, job.id, job.handle, resume_path, linkedin_path)
     return {"job": job.to_dict()}
+
+
+@app.post("/rubrics/from-job-description")
+def rubric_from_job_description(request: JobDescriptionRequest) -> dict[str, Any]:
+    """Derive a rubric from a posting, and say which phrases raised what.
+
+    The derivation is returned alongside the rubric so a recruiter can check the
+    reasoning before ranking anyone against it, and so a candidate can be told
+    why a dimension counted for what it did.
+    """
+    try:
+        rubric = derive_rubric(request.name, request.text)
+    except (ValueError, RubricError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    with _session() as session:
+        save_rubric(session, rubric)
+
+    return {
+        "rubric": rubric.to_dict(),
+        "derivation": read_job_description(request.text).to_dict(),
+    }
 
 
 @app.get("/candidates/jobs/{job_id}")

@@ -279,3 +279,45 @@ def test_an_unknown_job_is_a_404(tmp_path, monkeypatch):
     assert client.get("/candidates/jobs/nope").status_code == 404
 
     get_settings.cache_clear()
+
+
+def test_a_job_description_becomes_a_rubric(tmp_path, monkeypatch):
+    """A recruiter has a posting, not a weights table."""
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    response = client.post(
+        "/rubrics/from-job-description",
+        json={
+            "name": "secure-backend",
+            "text": "You will write unit tests and practise secure coding against OWASP.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rubric"]["name"] == "secure-backend"
+    assert body["derivation"]["emphases"]["security"]
+    assert body["derivation"]["emphases"]["test_quality"]
+
+    # It is stored, so a comparison can be created against it straight away.
+    listed = client.get("/rubrics").json()["rubrics"]
+    assert "secure-backend" in [r["name"] for r in listed]
+
+    get_settings.cache_clear()
+
+
+def test_an_empty_job_description_is_refused(tmp_path, monkeypatch):
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    response = client.post(
+        "/rubrics/from-job-description", json={"name": "empty", "text": "   "}
+    )
+
+    assert response.status_code == 400
+    assert "empty" in response.json()["detail"]
+
+    get_settings.cache_clear()
