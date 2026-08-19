@@ -81,6 +81,30 @@ uvicorn veriquill.api.main:app --reload
 returns it. Rubrics, comparisons, review actions, and exports have endpoints
 mirroring the CLI commands below.
 
+## Adding candidates
+
+From the review screen, open **Add candidates and rank a cohort**, enter a GitHub
+username, and optionally attach a résumé or a LinkedIn export. Analysis runs as a
+background job because cloning a portfolio takes a minute or two; the form reports
+progress and says so up front. Once stored, tick the candidates and rank them —
+the whole loop stays in the browser.
+
+Uploaded documents are read once and deleted. Protected-attribute fields are
+removed before parsing, before any model call, and before anything is stored.
+
+The equivalent from a terminal:
+
+```bash
+veriquill dossier alice
+veriquill dossier bob --resume ./bob-cv.pdf --linkedin ./bob-export.csv
+```
+
+Either route produces the same stored dossier.
+
+**Run the API from the repository root.** Settings read `.env` relative to the
+working directory, so starting `uvicorn` elsewhere loses the GitHub token and
+every analysis fails with `MissingTokenError`.
+
 ## Comparing candidates
 
 Ranking reads stored dossiers. It never re-analyses anyone, makes no network
