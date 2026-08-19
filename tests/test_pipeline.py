@@ -18,7 +18,7 @@ async def test_run_summary_collects_findings_per_repository(tmp_path, monkeypatc
     good = build_repo(sources, "good", organic_history())
     bad = build_repo(sources, "bad", bulk_dump_history())
 
-    async def fake_identity(client, handle):
+    async def fake_identity(client, handle, aliases=frozenset()):
         return {"identities": frozenset({"candidate@example.com", "candidate"})}
 
     async def fake_repos(client, handle):
@@ -46,7 +46,7 @@ async def test_run_summary_collects_findings_per_repository(tmp_path, monkeypatc
 
 
 async def test_unclonable_repository_records_an_error_not_a_flag(tmp_path, monkeypatch):
-    async def fake_identity(client, handle):
+    async def fake_identity(client, handle, aliases=frozenset()):
         return {"identities": frozenset({"candidate"})}
 
     async def fake_repos(client, handle):
@@ -73,7 +73,7 @@ async def test_every_finding_in_a_summary_cites_evidence(tmp_path, monkeypatch):
     sources = tmp_path / "sources"
     bad = build_repo(sources, "bad", bulk_dump_history())
 
-    async def fake_identity(client, handle):
+    async def fake_identity(client, handle, aliases=frozenset()):
         return {"identities": frozenset({"candidate@example.com", "candidate"})}
 
     async def fake_repos(client, handle):
@@ -95,7 +95,7 @@ async def test_evidence_is_built_for_each_analysed_repository(tmp_path, monkeypa
     sources = tmp_path / "sources"
     good = build_repo(sources, "good", organic_history())
 
-    async def fake_identity(client, handle):
+    async def fake_identity(client, handle, aliases=frozenset()):
         return {"identities": frozenset({"candidate@example.com", "candidate"})}
 
     async def fake_repos(client, handle):
@@ -126,7 +126,7 @@ async def test_evidence_is_built_for_each_analysed_repository(tmp_path, monkeypa
 
 
 async def test_a_failed_repository_carries_no_evidence(tmp_path, monkeypatch):
-    async def fake_identity(client, handle):
+    async def fake_identity(client, handle, aliases=frozenset()):
         return {"identities": frozenset({"candidate"})}
 
     async def fake_repos(client, handle):

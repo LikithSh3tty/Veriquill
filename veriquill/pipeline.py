@@ -113,6 +113,7 @@ async def _analyse_repo(
     repo: dict[str, Any],
     handle: str,
     identities: frozenset[str],
+    user_id: int | None,
     settings: Settings,
     known_fingerprints: dict[str, list[str]],
     semaphore: asyncio.Semaphore,
@@ -132,6 +133,7 @@ async def _analyse_repo(
                     identities=identities,
                     commits=read_history(clone_path),
                     metadata=repo,
+                    user_id=user_id,
                 )
                 result.findings = run_provenance(ctx, settings, known_fingerprints)
                 result.findings.extend(run_codeeval(ctx, settings))
@@ -151,6 +153,7 @@ async def analyse_candidate(
     settings: Settings,
     client: GitHubClient | None = None,
     known_fingerprints: dict[str, list[str]] | None = None,
+    aliases: frozenset[str] = frozenset(),
 ) -> RunSummary:
     settings.ensure_dirs()
     summary = RunSummary(handle=handle, started_at=datetime.now(timezone.utc))
@@ -158,7 +161,7 @@ async def analyse_candidate(
     active = client or GitHubClient(settings)
 
     async with active as connected:
-        identity = await fetch_identity(connected, handle)
+        identity = await fetch_identity(connected, handle, aliases)
         repos = await list_repositories(connected, handle)
 
         semaphore = asyncio.Semaphore(settings.max_clone_concurrency)
@@ -169,6 +172,7 @@ async def analyse_candidate(
                         repo,
                         handle,
                         identity["identities"],
+                        identity.get("user_id"),
                         settings,
                         fingerprints,
                         semaphore,

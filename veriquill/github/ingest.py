@@ -11,9 +11,17 @@ from typing import Any
 from veriquill.github.client import GitHubClient
 
 
-async def fetch_identity(client: GitHubClient, handle: str) -> dict[str, Any]:
+async def fetch_identity(
+    client: GitHubClient, handle: str, aliases: frozenset[str] = frozenset()
+) -> dict[str, Any]:
+    """Resolve who this account is, including who it used to be.
+
+    `aliases` carries names the candidate says are also theirs — a previous
+    GitHub login, or the name their git config writes. Renames are common, and
+    every commit pushed before one keeps the old login forever.
+    """
     profile = await client.get_json(f"/users/{handle}")
-    identities = {handle.lower()}
+    identities = {handle.lower()} | {a.strip().lower() for a in aliases if a.strip()}
     for key in ("login", "name", "email"):
         value = profile.get(key)
         if value:
@@ -22,7 +30,13 @@ async def fetch_identity(client: GitHubClient, handle: str) -> dict[str, Any]:
     if user_id is not None:
         identities.add(f"{user_id}+{handle}@users.noreply.github.com".lower())
     identities.add(f"{handle}@users.noreply.github.com".lower())
-    return {"profile": profile, "identities": frozenset(identities)}
+    for alias in list(identities):
+        identities.add(f"{alias}@users.noreply.github.com")
+    return {
+        "profile": profile,
+        "identities": frozenset(identities),
+        "user_id": user_id,
+    }
 
 
 async def list_repositories(client: GitHubClient, handle: str) -> list[dict[str, Any]]:
