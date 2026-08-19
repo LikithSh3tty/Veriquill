@@ -134,11 +134,22 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
             Where bars overlap, Veriquill cannot separate those candidates and
             says so rather than guessing.
           </p>
-          <BandAxis
-            rows={result?.ranked ?? []}
-            selected={selected}
-            onSelect={setSelected}
-          />
+          {result === null && problem === null ? (
+            // "Nobody has been ranked" and "the answer has not arrived yet" are
+            // different statements, and the empty state must not make the first
+            // one while the second is true.
+            <div className="band-axis" aria-busy="true" aria-label="Loading the comparison">
+              <span className="skeleton" />
+              <span className="skeleton" />
+              <span className="skeleton skeleton--half" />
+            </div>
+          ) : (
+            <BandAxis
+              rows={result?.ranked ?? []}
+              selected={selected}
+              onSelect={setSelected}
+            />
+          )}
 
           {result?.unranked.length ? (
             <div className="unranked">
