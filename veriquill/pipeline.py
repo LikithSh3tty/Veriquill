@@ -26,6 +26,7 @@ from veriquill.github.ingest import fetch_identity, list_repositories
 from veriquill.provenance.duplication import fingerprint_repo
 from veriquill.provenance.engine import run_provenance
 from veriquill.reconcile.evidence import RepoEvidence
+from veriquill.relevance import select_repositories
 from veriquill.vendored import is_vendored
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,10 @@ class RunSummary:
     started_at: datetime
     finished_at: datetime | None = None
     repositories: list[RepoResult] = field(default_factory=list)
+    # Everything the account holds, so a partial read never looks like a full one.
+    repositories_on_account: int = 0
+    skipped: list[dict[str, Any]] = field(default_factory=list)
+    selection: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -105,6 +110,24 @@ class RunSummary:
                 "Findings are advisory and evidence-linked. They are questions for a "
                 "human reviewer, never verdicts, and never proof of wrongdoing."
             ),
+            "repositories_on_account": self.repositories_on_account or len(self.repositories),
+            "repositories_read": len(self.repositories),
+            "repositories_skipped": [
+                {
+                    "repository": row["repository"].get("full_name")
+                    or row["repository"].get("name"),
+                    "reason": row["reason"],
+                }
+                for row in self.skipped
+            ],
+            "selection": [
+                {
+                    "repository": row["repository"].get("full_name")
+                    or row["repository"].get("name"),
+                    "reasons": row["reasons"],
+                }
+                for row in self.selection
+            ],
             "repositories": [r.to_dict() for r in self.repositories],
         }
 
@@ -154,6 +177,7 @@ async def analyse_candidate(
     client: GitHubClient | None = None,
     known_fingerprints: dict[str, list[str]] | None = None,
     aliases: frozenset[str] = frozenset(),
+    job_description: str = "",
 ) -> RunSummary:
     settings.ensure_dirs()
     summary = RunSummary(handle=handle, started_at=datetime.now(timezone.utc))
@@ -163,6 +187,19 @@ async def analyse_candidate(
     async with active as connected:
         identity = await fetch_identity(connected, handle, aliases)
         repos = await list_repositories(connected, handle)
+        summary.repositories_on_account = len(repos)
+
+        # A large account is read in part, most-relevant first. What is skipped
+        # is named and lowers coverage; it is never treated as a finding.
+        selected, skipped = select_repositories(
+            repos,
+            job_description,
+            limit=settings.relevance_limit,
+            threshold=settings.relevance_threshold,
+        )
+        summary.selection = selected
+        summary.skipped = skipped
+        repos = [row["repository"] for row in selected]
 
         semaphore = asyncio.Semaphore(settings.max_clone_concurrency)
         summary.repositories = list(
@@ -191,6 +228,7 @@ async def build_candidate_dossier(
     settings: Settings,
     resume: Path | None = None,
     linkedin: Path | None = None,
+    job_description: str = "",
 ) -> dict[str, Any]:
     """Analyse a candidate and assemble their dossier.
 
@@ -201,11 +239,17 @@ async def build_candidate_dossier(
     from veriquill.dossier import build_dossier
     from veriquill.reconcile.engine import reconcile
 
-    summary = await analyse_candidate(handle, settings)
+    summary = await analyse_candidate(handle, settings, job_description=job_description)
     claim_set = collect_claims(settings, resume=resume, linkedin=linkedin)
     evidence = [r.evidence for r in summary.repositories if r.evidence is not None]
 
-    report = build_dossier(handle, summary.repositories, reconcile(claim_set.claims, evidence))
+    report = build_dossier(
+        handle,
+        summary.repositories,
+        reconcile(claim_set.claims, evidence),
+        repositories_on_account=summary.repositories_on_account,
+        skipped=summary.to_dict()["repositories_skipped"],
+    )
     report["claims_examined"] = len(claim_set.claims)
     report["claim_errors"] = claim_set.errors
     return report

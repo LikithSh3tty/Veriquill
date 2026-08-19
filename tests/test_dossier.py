@@ -211,3 +211,42 @@ def test_an_unverifiable_claim_lowers_resolution_not_the_claim_count():
     coverage = dossier["analysis_coverage"]
     assert coverage["claims_total"] == 2
     assert coverage["claims_resolved"] == 1
+
+
+def test_skipping_repositories_lowers_coverage_rather_than_hiding_them():
+    """Reading five of twenty-one must never read as having read everything."""
+    skipped = [
+        {"repository": f"cand/skipped-{i}", "reason": "outside the relevant selection"}
+        for i in range(16)
+    ]
+
+    dossier = build_dossier(
+        "cand",
+        [_analysed_repo()],
+        [],
+        repositories_on_account=17,
+        skipped=skipped,
+    )
+
+    coverage = dossier["analysis_coverage"]
+    assert coverage["repositories_considered"] == 17
+    assert coverage["repositories_analysed"] == 1
+    assert len(dossier["repositories_not_read"]) == 16
+
+
+def test_the_notes_name_the_repositories_that_were_not_read():
+    skipped = [{"repository": "cand/hobby", "reason": "outside the relevant selection"}]
+
+    dossier = build_dossier("cand", [_analysed_repo()], [], repositories_on_account=2, skipped=skipped)
+
+    notes = " ".join(dossier["provenance_and_fairness_notes"])
+    assert "cand/hobby" in notes
+    assert "not read" in notes
+
+
+def test_a_full_read_says_nothing_about_skipping():
+    dossier = build_dossier("cand", [_analysed_repo()], [])
+
+    notes = " ".join(dossier["provenance_and_fairness_notes"])
+    assert "not read" not in notes
+    assert dossier["repositories_not_read"] == []

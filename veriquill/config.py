@@ -45,6 +45,19 @@ class Settings(BaseSettings):
     code_review_model: str = "claude-sonnet-5"
     code_review_max_tokens: int = 8000
 
+    # Reading a large account in part (relevance.py)
+    relevance_threshold: int = Field(
+        default=20,
+        description=(
+            "Accounts with more repositories than this are read in part, "
+            "most-relevant first. Smaller accounts are always read in full."
+        ),
+    )
+    relevance_limit: int = Field(
+        default=5,
+        description="How many repositories to read when an account is over the threshold.",
+    )
+
     # Rate limiting
     rate_limit_floor: int = Field(
         default=100,

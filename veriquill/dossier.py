@@ -150,7 +150,9 @@ def _red_flags(
 
 
 def _analysis_coverage(
-    repo_results: list[Any], reconciliations: list[Reconciliation]
+    repo_results: list[Any],
+    reconciliations: list[Reconciliation],
+    repositories_on_account: int = 0,
 ) -> dict[str, int]:
     """What the run was actually able to look at.
 
@@ -162,7 +164,9 @@ def _analysis_coverage(
     with_evidence = [r for r in analysed if getattr(r, "evidence", None) is not None]
 
     return {
-        "repositories_considered": len(repo_results),
+        # What the account holds, not what we managed to read. Reading five of
+        # twenty-one is a coverage fact, and the confidence band must feel it.
+        "repositories_considered": max(repositories_on_account, len(repo_results)),
         "repositories_analysed": len(analysed),
         "repositories_with_authored_code": sum(
             1 for r in with_evidence if r.evidence.authored_loc > 0
@@ -244,6 +248,8 @@ def build_dossier(
     handle: str,
     repo_results: list[Any],
     reconciliations: list[Reconciliation],
+    repositories_on_account: int = 0,
+    skipped: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     flags = _red_flags(repo_results, reconciliations)
     strengths = _verified_strengths(reconciliations)
@@ -279,6 +285,16 @@ def build_dossier(
         "counted, and no quality judgment is made about them in either "
         "direction.",
     ]
+    if skipped:
+        names = ", ".join(str(row.get("repository")) for row in skipped[:5])
+        more = "" if len(skipped) <= 5 else f", and {len(skipped) - 5} more"
+        notes.append(
+            f"{len(skipped)} repositor{'y' if len(skipped) == 1 else 'ies'} on this "
+            f"account were not read: {names}{more}. They were outside the most "
+            "relevant selection for this posting. Coverage below counts the whole "
+            "account, so the confidence band reflects what was left unread."
+        )
+
     for repo in errored:
         notes.append(
             f"Not analysed: {repo.full_name} ({repo.error}). This is recorded "
@@ -308,6 +324,9 @@ def build_dossier(
         "code_quality_snapshot": _code_quality_snapshot(repo_results),
         "gaps_and_open_questions": _open_questions(reconciliations, flags),
         "provenance_and_fairness_notes": notes,
-        "analysis_coverage": _analysis_coverage(repo_results, reconciliations),
+        "analysis_coverage": _analysis_coverage(
+            repo_results, reconciliations, repositories_on_account
+        ),
+        "repositories_not_read": list(skipped or []),
         "evidence_coverage": evidence_coverage,
     }
