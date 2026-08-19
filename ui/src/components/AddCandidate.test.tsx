@@ -55,7 +55,7 @@ describe("AddCandidate", () => {
     await user.type(screen.getByLabelText(/github username/i), "octocat");
     await user.click(screen.getByRole("button", { name: /add candidate/i }));
 
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("octocat", {}));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("octocat", {}, ""));
   });
 
   it("reports progress rather than leaving a dead button", async () => {
@@ -125,5 +125,36 @@ describe("AddCandidate", () => {
     setup();
 
     expect(screen.getByText(/removed|not kept|deleted/i)).toBeInTheDocument();
+  });
+});
+
+describe("AddCandidate with a posting", () => {
+  it("sends the posting so a large account is read most-relevant-first", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(queued);
+    render(
+      <AddCandidate
+        onSubmit={onSubmit}
+        onPoll={vi.fn().mockResolvedValue({ ...queued, status: "done" })}
+        onAdded={vi.fn()}
+        pollMs={5}
+      />,
+    );
+
+    await user.type(screen.getByLabelText(/github username/i), "octocat");
+    await user.type(screen.getByLabelText(/posting|job description/i), "Python and OWASP.");
+    await user.click(screen.getByRole("button", { name: /add candidate/i }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith("octocat", {}, "Python and OWASP."),
+    );
+  });
+
+  it("says what the posting is used for", () => {
+    render(
+      <AddCandidate onSubmit={vi.fn()} onPoll={vi.fn()} onAdded={vi.fn()} pollMs={5} />,
+    );
+
+    expect(screen.getByText(/most relevant/i)).toBeInTheDocument();
   });
 });

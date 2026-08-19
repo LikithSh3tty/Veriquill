@@ -15,6 +15,7 @@ type Props = {
   onSubmit: (
     handle: string,
     files: { resume?: File | null; linkedin?: File | null },
+    jobDescription: string,
   ) => Promise<IntakeJob>;
   onPoll: (id: string) => Promise<IntakeJob>;
   onAdded: (handle: string) => void;
@@ -32,6 +33,7 @@ export function AddCandidate({ onSubmit, onPoll, onAdded, pollMs = 1500 }: Props
   const [handle, setHandle] = useState("");
   const [resume, setResume] = useState<File | null>(null);
   const [linkedin, setLinkedin] = useState<File | null>(null);
+  const [posting, setPosting] = useState("");
   const [job, setJob] = useState<IntakeJob | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,10 +75,14 @@ export function AddCandidate({ onSubmit, onPoll, onAdded, pollMs = 1500 }: Props
     setProblem(null);
     setBusy(true);
     try {
-      const started = await onSubmit(handle.trim(), {
-        ...(resume ? { resume } : {}),
-        ...(linkedin ? { linkedin } : {}),
-      });
+      const started = await onSubmit(
+        handle.trim(),
+        {
+          ...(resume ? { resume } : {}),
+          ...(linkedin ? { linkedin } : {}),
+        },
+        posting.trim(),
+      );
       await watch(started);
     } catch (error) {
       setBusy(false);
@@ -123,6 +129,22 @@ export function AddCandidate({ onSubmit, onPoll, onAdded, pollMs = 1500 }: Props
             onChange={(event) => setLinkedin(event.target.files?.[0] ?? null)}
           />
         </div>
+      </div>
+
+      <div className="intake__field">
+        <label htmlFor="posting">Job description (optional)</label>
+        <textarea
+          id="posting"
+          rows={4}
+          value={posting}
+          placeholder="Paste the posting to focus a large account on the work that matters."
+          onChange={(event) => setPosting(event.target.value)}
+        />
+        <p className="intake__hint">
+          On an account with more than 20 repositories, Veriquill reads the 5 most
+          relevant to this posting and records the rest as unread — which lowers
+          coverage rather than counting against the candidate.
+        </p>
       </div>
 
       <p className="intake__note">

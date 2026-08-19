@@ -202,9 +202,13 @@ export type StoredCandidate = {
 export async function addCandidate(
   handle: string,
   files: { resume?: File | null; linkedin?: File | null } = {},
+  jobDescription = "",
 ): Promise<IntakeJob> {
   const form = new FormData();
   form.append("handle", handle);
+  // A large account is read most-relevant-first, so the posting has to travel
+  // with the request: selection happens before any repository is cloned.
+  if (jobDescription.trim()) form.append("job_description", jobDescription.trim());
   if (files.resume) form.append("resume", files.resume);
   if (files.linkedin) form.append("linkedin", files.linkedin);
 
