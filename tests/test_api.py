@@ -186,3 +186,96 @@ def test_dossiers_for_an_unknown_comparison_are_a_404(tmp_path, monkeypatch):
     assert client.get("/comparisons/404/dossiers").status_code == 404
 
     get_settings.cache_clear()
+
+
+def test_candidates_can_be_added_from_the_interface(tmp_path, monkeypatch):
+    """The whole point of intake: a handle goes in, a stored dossier comes out."""
+    from veriquill.api import main as api_main
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    async def fake_pipeline(handle, settings, resume=None, linkedin=None):
+        from tests.test_dimensions import make_dossier
+
+        payload = make_dossier()
+        payload["handle"] = handle
+        return payload
+
+    monkeypatch.setattr(api_main, "build_candidate_dossier", fake_pipeline)
+
+    accepted = client.post("/candidates", data={"handle": "newcomer"})
+    assert accepted.status_code == 202
+    job_id = accepted.json()["job"]["id"]
+
+    # TestClient runs background tasks before returning, so the job is settled.
+    job = client.get(f"/candidates/jobs/{job_id}")
+    assert job.status_code == 200
+    assert job.json()["job"]["status"] == "done"
+    assert job.json()["job"]["dossier_id"]
+
+    listed = client.get("/candidates")
+    assert "newcomer" in [row["handle"] for row in listed.json()["candidates"]]
+
+    get_settings.cache_clear()
+
+
+def test_a_failed_analysis_reports_why_rather_than_vanishing(tmp_path, monkeypatch):
+    from veriquill.api import main as api_main
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    async def explode(handle, settings, resume=None, linkedin=None):
+        raise RuntimeError("GitHub said 404 for 'ghost'")
+
+    monkeypatch.setattr(api_main, "build_candidate_dossier", explode)
+
+    accepted = client.post("/candidates", data={"handle": "ghost"})
+    job_id = accepted.json()["job"]["id"]
+
+    job = client.get(f"/candidates/jobs/{job_id}").json()["job"]
+    assert job["status"] == "failed"
+    assert "404" in job["error"]
+
+    get_settings.cache_clear()
+
+
+def test_a_malformed_handle_is_refused_before_any_work_starts(tmp_path, monkeypatch):
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    response = client.post("/candidates", data={"handle": "not a handle"})
+
+    assert response.status_code == 400
+    assert "GitHub username" in response.json()["detail"]
+
+    get_settings.cache_clear()
+
+
+def test_an_unsupported_upload_is_refused(tmp_path, monkeypatch):
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    response = client.post(
+        "/candidates",
+        data={"handle": "octocat"},
+        files={"resume": ("payload.exe", b"MZ", "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert ".exe" in response.json()["detail"]
+
+    get_settings.cache_clear()
+
+
+def test_an_unknown_job_is_a_404(tmp_path, monkeypatch):
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+
+    assert client.get("/candidates/jobs/nope").status_code == 404
+
+    get_settings.cache_clear()

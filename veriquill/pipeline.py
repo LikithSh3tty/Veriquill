@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
@@ -179,3 +180,28 @@ async def analyse_candidate(
 
     summary.finished_at = datetime.now(timezone.utc)
     return summary
+
+
+async def build_candidate_dossier(
+    handle: str,
+    settings: Settings,
+    resume: Path | None = None,
+    linkedin: Path | None = None,
+) -> dict[str, Any]:
+    """Analyse a candidate and assemble their dossier.
+
+    The CLI and the HTTP intake both come through here, so a candidate added from
+    the interface is the same artifact as one added from a terminal.
+    """
+    from veriquill.claims.engine import collect_claims
+    from veriquill.dossier import build_dossier
+    from veriquill.reconcile.engine import reconcile
+
+    summary = await analyse_candidate(handle, settings)
+    claim_set = collect_claims(settings, resume=resume, linkedin=linkedin)
+    evidence = [r.evidence for r in summary.repositories if r.evidence is not None]
+
+    report = build_dossier(handle, summary.repositories, reconcile(claim_set.claims, evidence))
+    report["claims_examined"] = len(claim_set.claims)
+    report["claim_errors"] = claim_set.errors
+    return report

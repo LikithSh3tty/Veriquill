@@ -156,3 +156,31 @@ def get_comparison(session: Session, comparison_id: int) -> ComparisonRecord:
 
 def dossier_payloads(session: Session, comparison: ComparisonRecord) -> list[dict[str, Any]]:
     return [entry.dossier.payload for entry in sorted(comparison.entries, key=lambda e: e.id)]
+
+
+def list_candidates(session: Session) -> list[dict[str, Any]]:
+    """Every candidate with a stored dossier, newest first.
+
+    The interface needs to know who can be ranked, which is exactly who has a
+    dossier — not who was ever analysed.
+    """
+    records = session.scalars(
+        select(DossierRecord).order_by(DossierRecord.id.desc())
+    ).all()
+
+    seen: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        if record.candidate_handle in seen:
+            continue
+        seen.add(record.candidate_handle)
+        payload = record.payload or {}
+        rows.append(
+            {
+                "handle": record.candidate_handle,
+                "dossier_id": record.id,
+                "stored_at": record.created_at.isoformat(),
+                "flags": len(payload.get("red_flag_register") or []),
+            }
+        )
+    return rows

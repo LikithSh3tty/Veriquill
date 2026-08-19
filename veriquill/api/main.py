@@ -11,19 +11,29 @@ real deployment has to put an authenticated identity in that field.
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from veriquill import __version__
 from veriquill.config import get_settings
 from veriquill.db import init_db, make_engine, make_session_factory
-from veriquill.pipeline import analyse_candidate
+from veriquill.intake import (
+    LINKEDIN_SUFFIXES,
+    RESUME_SUFFIXES,
+    IntakeError,
+    JobStore,
+    stage_upload,
+)
+from veriquill.pipeline import analyse_candidate, build_candidate_dossier
 from veriquill.review import ReviewError, audit_log, effective_result, export_payload, record_action
 from veriquill.review import approve as approve_comparison
 from veriquill.rubric import Rubric, RubricError
@@ -31,7 +41,9 @@ from veriquill.store import (
     StoreError,
     create_comparison,
     get_comparison,
+    list_candidates,
     list_rubrics,
+    save_dossier,
     save_rubric,
 )
 
@@ -40,6 +52,9 @@ app = FastAPI(title="Veriquill", version=__version__)
 # Analysis runs stay in-process: they are large, transient, and superseded by the
 # dossier the moment one is built. Everything a reviewer acts on lives in SQLite.
 _RUNS: dict[str, dict[str, Any]] = {}
+
+# Intake jobs are transient; the dossier each one writes is what persists.
+_JOBS = JobStore()
 
 
 @contextmanager
@@ -221,3 +236,89 @@ def audit_endpoint(comparison_id: int) -> dict[str, Any]:
             "comparison_id": comparison.id,
             "audit_log": audit_log(session, comparison),
         }
+
+
+async def _run_intake(job_id: str, handle: str, resume: Path | None, linkedin: Path | None) -> None:
+    """Analyse a candidate and store the dossier, then clean up the uploads.
+
+    Any failure is recorded against the job with its reason. A candidate who
+    cannot be analysed is never a silent no-op, and never a crashed server.
+    """
+    settings = get_settings()
+    _JOBS.start(job_id)
+    try:
+        report = await build_candidate_dossier(handle, settings, resume=resume, linkedin=linkedin)
+        with _session() as session:
+            record = save_dossier(session, report)
+            dossier_id = record.id
+        _JOBS.finish(job_id, dossier_id=dossier_id)
+    except Exception as exc:
+        _JOBS.fail(job_id, f"{type(exc).__name__}: {exc}")
+    finally:
+        # Uploaded documents are working material, not records. The claims they
+        # produced are stored; the files themselves are not kept.
+        for path in (resume, linkedin):
+            if path is not None:
+                shutil.rmtree(path.parent, ignore_errors=True)
+
+
+@app.post("/candidates", status_code=202)
+async def add_candidate(
+    background: BackgroundTasks,
+    handle: str = Form(...),
+    resume: UploadFile | None = File(None),
+    linkedin: UploadFile | None = File(None),
+) -> dict[str, Any]:
+    """Start analysing a candidate. Returns immediately with a job to poll.
+
+    Cloning a portfolio takes minutes, so this cannot be a request that waits.
+    """
+    settings = get_settings()
+    settings.ensure_dirs()
+
+    try:
+        job = _JOBS.create(handle)
+    except IntakeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    staging = Path(tempfile.mkdtemp(prefix="veriquill-intake-", dir=settings.workdir))
+    try:
+        resume_path = (
+            stage_upload(resume.filename or "", await resume.read(), staging, RESUME_SUFFIXES)
+            if resume is not None and resume.filename
+            else None
+        )
+        linkedin_path = (
+            stage_upload(
+                linkedin.filename or "", await linkedin.read(), staging, LINKEDIN_SUFFIXES
+            )
+            if linkedin is not None and linkedin.filename
+            else None
+        )
+    except IntakeError as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        _JOBS.fail(job.id, str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    background.add_task(_run_intake, job.id, job.handle, resume_path, linkedin_path)
+    return {"job": job.to_dict()}
+
+
+@app.get("/candidates/jobs/{job_id}")
+def read_intake_job(job_id: str) -> dict[str, Any]:
+    try:
+        return {"job": _JOBS.get(job_id).to_dict()}
+    except IntakeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/candidates/jobs")
+def read_intake_jobs() -> dict[str, Any]:
+    return {"jobs": [job.to_dict() for job in _JOBS.list()]}
+
+
+@app.get("/candidates")
+def read_candidates() -> dict[str, Any]:
+    """Everyone with a stored dossier, and so everyone who can be ranked."""
+    with _session() as session:
+        return {"candidates": list_candidates(session)}
