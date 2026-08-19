@@ -222,7 +222,9 @@ export async function fetchIntakeJob(id: string): Promise<IntakeJob> {
 
 export async function fetchCandidates(): Promise<StoredCandidate[]> {
   const payload = await request<{ candidates: StoredCandidate[] }>("/candidates");
-  return payload.candidates;
+  // A response missing the field is a contract mismatch, not a reason to hand a
+  // component undefined and let it crash the screen.
+  return payload.candidates ?? [];
 }
 
 export async function createComparison(
@@ -238,5 +240,5 @@ export async function createComparison(
 
 export async function fetchRubrics(): Promise<{ name: string }[]> {
   const payload = await request<{ rubrics: { name: string }[] }>("/rubrics");
-  return payload.rubrics;
+  return payload.rubrics ?? [];
 }

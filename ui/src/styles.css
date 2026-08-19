@@ -1067,3 +1067,28 @@ code {
   background: var(--panel-sunk);
   border-radius: 2px;
 }
+
+/* --- intake drawer ------------------------------------------------------- */
+
+.intake-drawer {
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--rule);
+}
+
+.intake-drawer > summary {
+  font-size: var(--text-sm);
+  font-weight: 650;
+  color: var(--ink);
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  list-style-position: inside;
+}
+
+.intake-drawer > summary:hover {
+  color: var(--human);
+}
+
+.intake-drawer[open] > summary {
+  margin-bottom: var(--space-4);
+}

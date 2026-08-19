@@ -18,7 +18,7 @@ type Props = {
   onRanked: (comparisonId: number) => void;
 };
 
-export function CohortPicker({ candidates, rubrics, onRank, onRanked }: Props) {
+export function CohortPicker({ candidates = [], rubrics = [], onRank, onRanked }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [rubric, setRubric] = useState(rubrics[0]?.name ?? "");
   const [problem, setProblem] = useState<string | null>(null);

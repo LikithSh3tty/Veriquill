@@ -60,7 +60,9 @@ describe("AddCandidate", () => {
 
   it("reports progress rather than leaving a dead button", async () => {
     const user = userEvent.setup();
-    setup();
+    // Hold the job in flight, or it finishes before the assertion and the
+    // progress line is legitimately gone.
+    setup({ onPoll: vi.fn().mockResolvedValue({ ...queued, status: "running" }) });
 
     await user.type(screen.getByLabelText(/github username/i), "octocat");
     await user.click(screen.getByRole("button", { name: /add candidate/i }));

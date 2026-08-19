@@ -11,16 +11,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  addCandidate,
   approve,
+  createComparison,
   fetchAudit,
+  fetchCandidates,
   fetchComparison,
   fetchDossiers,
+  fetchIntakeJob,
+  fetchRubrics,
   recordReview,
   type AuditRow,
   type ComparisonResult,
   type ReviewAction,
+  type StoredCandidate,
 } from "./api";
+import { AddCandidate } from "./components/AddCandidate";
 import { BandAxis } from "./components/BandAxis";
+import { CohortPicker } from "./components/CohortPicker";
 import { ReviewPanel, type Flag } from "./components/ReviewPanel";
 
 type Props = {
@@ -36,6 +44,20 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
   const [actor, setActor] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [flags, setFlags] = useState<Record<string, Flag[]>>(dossierFlags);
+  const [candidates, setCandidates] = useState<StoredCandidate[]>([]);
+  const [rubrics, setRubrics] = useState<{ name: string }[]>([]);
+
+  // Who can be ranked is independent of whether this comparison loads. On a
+  // fresh install there is no comparison yet, and intake still has to work.
+  const loadRoster = useCallback(async () => {
+    try {
+      const [stored, available] = await Promise.all([fetchCandidates(), fetchRubrics()]);
+      setCandidates(stored);
+      setRubrics(available);
+    } catch {
+      // The roster is a convenience; its absence must not blank the review screen.
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -63,7 +85,8 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadRoster();
+  }, [load, loadRoster]);
 
   const current = useMemo(
     () => result?.ranked.find((row) => row.handle === selected) ?? null,
@@ -128,6 +151,25 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
 
       <main className="app__body">
         <section className="app__cohort">
+          {/* Open by default when there is nothing ranked yet: on a fresh
+              install this panel is the only thing worth doing. */}
+          <details className="intake-drawer" open={(result?.ranked.length ?? 0) === 0}>
+            <summary>Add candidates and rank a cohort</summary>
+            <AddCandidate
+              onSubmit={addCandidate}
+              onPoll={fetchIntakeJob}
+              onAdded={() => void loadRoster()}
+            />
+            <CohortPicker
+              candidates={candidates}
+              rubrics={rubrics}
+              onRank={createComparison}
+              onRanked={(id) => {
+                window.location.search = `?comparison=${id}`;
+              }}
+            />
+          </details>
+
           <h1>Where the evidence places them</h1>
           <p className="app__lede">
             Each bar is the range the evidence supports, not a single score.
