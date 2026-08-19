@@ -105,6 +105,26 @@ Either route produces the same stored dossier.
 working directory, so starting `uvicorn` elsewhere loses the GitHub token and
 every analysis fails with `MissingTokenError`.
 
+## Large accounts
+
+An account with more than 20 repositories is read in part: Veriquill clones the 5
+most relevant to the posting and names the rest as unread. Both numbers are
+configurable (`VERIQUILL_RELEVANCE_THRESHOLD`, `VERIQUILL_RELEVANCE_LIMIT`), and a
+smaller account is always read in full.
+
+Relevance is decided from metadata GitHub already returned — language named in the
+posting, matching topics, matching description terms, size, recency, fork status —
+so nothing is cloned in order to decide whether to clone it. Every selected
+repository records why it was chosen, and every skipped one is named.
+
+**Skipping is coverage, never a finding.** The dossier counts the whole account,
+so reading 5 of 21 lowers coverage and widens the confidence band. A partial look
+must never read as a full one, and a candidate is never marked down for work the
+tool chose not to read.
+
+The ordering among equally relevant repositories falls back to size and recency,
+which is a proxy rather than a judgment of merit.
+
 ## Comparing candidates
 
 Ranking reads stored dossiers. It never re-analyses anyone, makes no network
