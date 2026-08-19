@@ -39,6 +39,11 @@ FULL_BREADTH_REPOS = 5
 CONTRADICTION_WEIGHT = 2.0
 
 
+def _repos(count: int) -> str:
+    """Plural that reads like English: this string reaches a recruiter's screen."""
+    return "1 repository" if count == 1 else f"{count} repositories"
+
+
 def _coverage(dossier: dict[str, Any]) -> dict[str, int]:
     return dossier.get("analysis_coverage") or {}
 
@@ -105,7 +110,7 @@ def _from_penalty(
         return _unmeasured(dimension, "no repository could be analysed")
 
     basis = (
-        f"{len(flags)} flag(s) across {scale} analysed repositor(y/ies)"
+        f"{len(flags)} flag(s) across {_repos(scale)} analysed"
         if flags
         else clean_detail
     )
@@ -139,7 +144,7 @@ def score_authenticity(dossier: dict[str, Any], dismissed: frozenset[str]) -> Di
         flags,
         analysed,
         min(1.0, analysed / max(1, considered)),
-        f"commit history read for {analysed} repositor(y/ies), no authenticity flag raised",
+        f"commit history read for {_repos(analysed)}, no authenticity flag raised",
     )
 
 
@@ -264,7 +269,7 @@ def score_breadth(dossier: dict[str, Any], dismissed: frozenset[str]) -> Dimensi
         coverage=1.0,
         evidence=evidence,
         basis=(
-            f"{authored} repositor(y/ies) hold authored code; "
+            f"{_repos(authored)} hold authored code; "
             f"{FULL_BREADTH_REPOS} or more scores full marks"
         ),
     )
