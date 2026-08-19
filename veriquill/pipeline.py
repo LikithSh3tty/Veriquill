@@ -9,8 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from veriquill import __version__
@@ -19,14 +19,14 @@ from veriquill.codeeval.engine import run_codeeval
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import Finding
-from veriquill.reconcile.evidence import RepoEvidence
-from veriquill.vendored import is_vendored
 from veriquill.github.client import GitHubClient
 from veriquill.github.clone import CloneError, ephemeral_clone
 from veriquill.github.history import read_history
 from veriquill.github.ingest import fetch_identity, list_repositories
 from veriquill.provenance.duplication import fingerprint_repo
 from veriquill.provenance.engine import run_provenance
+from veriquill.reconcile.evidence import RepoEvidence
+from veriquill.vendored import is_vendored
 
 logger = logging.getLogger(__name__)
 
