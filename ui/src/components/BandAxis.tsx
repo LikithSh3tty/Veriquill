@@ -60,7 +60,14 @@ function Row({
         onClick={() => onSelect?.(row.handle)}
       >
         <span className="band-row__rank">{row.rank}</span>
-        <span className="band-row__handle">{row.handle}</span>
+        <span className="band-row__handle">
+          {row.handle}
+          {row.separated_weakly ? (
+            <span className="band-row__weak" title={row.separation_note}>
+              narrow gap
+            </span>
+          ) : null}
+        </span>
 
         <span className="band-row__track">
           {MARKS.map((mark) => (

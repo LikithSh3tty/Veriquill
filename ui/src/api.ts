@@ -54,6 +54,8 @@ export type RankedRow = {
   tie_group: number;
   score: CandidateScore;
   drivers: string[];
+  separated_weakly?: boolean;
+  separation_note?: string;
   machine_score?: CandidateScore | null;
   human_band?: string | null;
   override_reason?: string | null;
@@ -241,4 +243,25 @@ export async function createComparison(
 export async function fetchRubrics(): Promise<{ name: string }[]> {
   const payload = await request<{ rubrics: { name: string }[] }>("/rubrics");
   return payload.rubrics ?? [];
+}
+
+export type DerivedRubric = {
+  rubric: {
+    name: string;
+    version: number;
+    weights: Record<string, number>;
+    minimum_bars: Record<string, number>;
+  };
+  derivation: {
+    emphases: Record<string, string[]>;
+    note: string;
+  };
+};
+
+/** Turn a job description into a stored rubric, with the phrases that shaped it. */
+export async function deriveRubric(name: string, text: string): Promise<DerivedRubric> {
+  return request<DerivedRubric>("/rubrics/from-job-description", {
+    method: "POST",
+    body: JSON.stringify({ name, text }),
+  });
 }

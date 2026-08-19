@@ -14,6 +14,7 @@ import {
   addCandidate,
   approve,
   createComparison,
+  deriveRubric,
   fetchAudit,
   fetchCandidates,
   fetchComparison,
@@ -29,6 +30,7 @@ import {
 import { AddCandidate } from "./components/AddCandidate";
 import { BandAxis } from "./components/BandAxis";
 import { CohortPicker } from "./components/CohortPicker";
+import { JobDescription } from "./components/JobDescription";
 import { ReviewPanel, type Flag } from "./components/ReviewPanel";
 
 type Props = {
@@ -159,6 +161,10 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
               onSubmit={addCandidate}
               onPoll={fetchIntakeJob}
               onAdded={() => void loadRoster()}
+            />
+            <JobDescription
+              onDerive={deriveRubric}
+              onDerived={() => void loadRoster()}
             />
             <CohortPicker
               candidates={candidates}
