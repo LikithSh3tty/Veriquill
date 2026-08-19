@@ -882,3 +882,99 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --- intake -------------------------------------------------------------- */
+
+.intake {
+  padding: var(--space-5);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.intake h2 {
+  margin-bottom: var(--space-2);
+}
+
+.intake__wait,
+.intake__note {
+  max-width: 52ch;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.intake__note {
+  margin-top: var(--space-3);
+}
+
+.intake__field {
+  margin-top: var(--space-4);
+}
+
+.intake__field label {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.intake__field input[type="text"],
+.intake__field input:not([type]) {
+  width: 100%;
+  max-width: 22rem;
+}
+
+.intake__field input[type="file"] {
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+  background: none;
+  border: 1px dashed var(--rule-strong);
+  padding: var(--space-2);
+  width: 100%;
+}
+
+.intake__uploads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-4);
+}
+
+.intake button {
+  margin-top: var(--space-4);
+}
+
+.intake__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+/* The pulse marks elapsed time honestly: it only runs while a job is running. */
+.intake__pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--human);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.intake__done {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--approved);
+  font-weight: 600;
+}
+
+.intake__problem {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--critical);
+}
