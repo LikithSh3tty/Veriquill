@@ -195,7 +195,7 @@ def test_candidates_can_be_added_from_the_interface(tmp_path, monkeypatch):
 
     client = _seeded_client(tmp_path, monkeypatch, flagged=False)
 
-    async def fake_pipeline(handle, settings, resume=None, linkedin=None):
+    async def fake_pipeline(handle, settings, resume=None, linkedin=None, job_description=""):
         from tests.test_dimensions import make_dossier
 
         payload = make_dossier()
@@ -226,7 +226,7 @@ def test_a_failed_analysis_reports_why_rather_than_vanishing(tmp_path, monkeypat
 
     client = _seeded_client(tmp_path, monkeypatch, flagged=False)
 
-    async def explode(handle, settings, resume=None, linkedin=None):
+    async def explode(handle, settings, resume=None, linkedin=None, job_description=""):
         raise RuntimeError("GitHub said 404 for 'ghost'")
 
     monkeypatch.setattr(api_main, "build_candidate_dossier", explode)
@@ -319,5 +319,34 @@ def test_an_empty_job_description_is_refused(tmp_path, monkeypatch):
 
     assert response.status_code == 400
     assert "empty" in response.json()["detail"]
+
+    get_settings.cache_clear()
+
+
+def test_a_posting_supplied_at_intake_reaches_the_analysis(tmp_path, monkeypatch):
+    """A large account is read most-relevant-first, so the posting has to arrive
+    before any cloning starts."""
+    from veriquill.api import main as api_main
+    from veriquill.config import get_settings
+
+    client = _seeded_client(tmp_path, monkeypatch, flagged=False)
+    seen = {}
+
+    async def capture(handle, settings, resume=None, linkedin=None, job_description=""):
+        from tests.test_dimensions import make_dossier
+
+        seen["job_description"] = job_description
+        payload = make_dossier()
+        payload["handle"] = handle
+        return payload
+
+    monkeypatch.setattr(api_main, "build_candidate_dossier", capture)
+
+    client.post(
+        "/candidates",
+        data={"handle": "newcomer", "job_description": "Python and OWASP."},
+    )
+
+    assert seen["job_description"] == "Python and OWASP."
 
     get_settings.cache_clear()

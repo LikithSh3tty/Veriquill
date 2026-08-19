@@ -244,7 +244,13 @@ def audit_endpoint(comparison_id: int) -> dict[str, Any]:
         }
 
 
-async def _run_intake(job_id: str, handle: str, resume: Path | None, linkedin: Path | None) -> None:
+async def _run_intake(
+    job_id: str,
+    handle: str,
+    resume: Path | None,
+    linkedin: Path | None,
+    job_description: str = "",
+) -> None:
     """Analyse a candidate and store the dossier, then clean up the uploads.
 
     Any failure is recorded against the job with its reason. A candidate who
@@ -253,7 +259,13 @@ async def _run_intake(job_id: str, handle: str, resume: Path | None, linkedin: P
     settings = get_settings()
     _JOBS.start(job_id)
     try:
-        report = await build_candidate_dossier(handle, settings, resume=resume, linkedin=linkedin)
+        report = await build_candidate_dossier(
+            handle,
+            settings,
+            resume=resume,
+            linkedin=linkedin,
+            job_description=job_description,
+        )
         with _session() as session:
             record = save_dossier(session, report)
             dossier_id = record.id
@@ -272,6 +284,7 @@ async def _run_intake(job_id: str, handle: str, resume: Path | None, linkedin: P
 async def add_candidate(
     background: BackgroundTasks,
     handle: str = Form(...),
+    job_description: str = Form(""),
     resume: UploadFile | None = File(None),
     linkedin: UploadFile | None = File(None),
 ) -> dict[str, Any]:
@@ -306,7 +319,9 @@ async def add_candidate(
         _JOBS.fail(job.id, str(exc))
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    background.add_task(_run_intake, job.id, job.handle, resume_path, linkedin_path)
+    background.add_task(
+        _run_intake, job.id, job.handle, resume_path, linkedin_path, job_description
+    )
     return {"job": job.to_dict()}
 
 
