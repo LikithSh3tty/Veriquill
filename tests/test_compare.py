@@ -27,25 +27,42 @@ def test_a_cleaner_candidate_outranks_a_flagged_one():
     assert result["ranked"][0]["rank"] == 1
 
 
-def test_indistinguishable_candidates_share_a_tie_group_and_a_rank():
+def test_every_candidate_gets_a_distinct_rank():
+    """A recruiter needs an order to work down, not a set of equals.
+
+    Overlapping bands mean the evidence separates two people weakly. That is
+    worth saying, but it is not a reason to refuse to say who is ahead.
+    """
+    result = compare([dossier_for("a"), dossier_for("b"), dossier_for("c")], RUBRIC)
+
+    ranks = [row["rank"] for row in result["ranked"]]
+    assert ranks == [1, 2, 3]
+
+
+def test_a_weak_separation_is_reported_without_collapsing_the_order():
     result = compare([dossier_for("a"), dossier_for("b")], RUBRIC)
 
-    ranks = {row["handle"]: row["rank"] for row in result["ranked"]}
-    groups = {row["tie_group"] for row in result["ranked"]}
-    assert ranks["a"] == ranks["b"] == 1
-    assert len(groups) == 1
+    rows = result["ranked"]
+    assert rows[0]["rank"] == 1 and rows[1]["rank"] == 2
+    assert rows[1]["separated_weakly"] is True
+    assert "overlap" in rows[1]["separation_note"].lower()
 
 
-def test_a_candidate_after_a_tie_gets_competition_ranking():
+def test_a_clear_gap_is_not_called_weak():
     flagged = dossier_for(
         "flagged", red_flag_register=[flag("provenance.bulk_dump", "critical")]
     )
 
-    result = compare([dossier_for("a"), dossier_for("b"), flagged], RUBRIC)
+    result = compare([dossier_for("a"), flagged], RUBRIC)
 
-    ranks = {row["handle"]: row["rank"] for row in result["ranked"]}
-    assert ranks["a"] == ranks["b"] == 1
-    assert ranks["flagged"] == 3
+    assert result["ranked"][1]["separated_weakly"] is False
+
+
+def test_the_order_is_deterministic_when_scores_are_identical():
+    first = compare([dossier_for("b"), dossier_for("a")], RUBRIC)
+    second = compare([dossier_for("a"), dossier_for("b")], RUBRIC)
+
+    assert [r["handle"] for r in first["ranked"]] == [r["handle"] for r in second["ranked"]]
 
 
 def test_an_unscorable_candidate_is_unranked_not_last():

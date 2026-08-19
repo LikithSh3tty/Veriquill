@@ -35,6 +35,8 @@ class ComparisonRow:
     tie_group: int
     score: CandidateScore
     drivers: tuple[str, ...]
+    separated_weakly: bool = False
+    separation_note: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -43,6 +45,8 @@ class ComparisonRow:
             "tie_group": self.tie_group,
             "score": self.score.to_dict(),
             "drivers": list(self.drivers),
+            "separated_weakly": self.separated_weakly,
+            "separation_note": self.separation_note,
         }
 
 
@@ -101,21 +105,34 @@ def compare(
 
     rows: list[ComparisonRow] = []
     tie_group = 0
-    group_rank = 1
     for index, candidate in enumerate(scored):
+        weakly = False
+        note = ""
+
         if index > 0:
             previous = scored[index - 1]
             gap = float(previous.score) - float(candidate.score)
-            if gap >= min(previous.width, candidate.width):
+            if gap < min(previous.width, candidate.width):
+                weakly = True
+                note = (
+                    f"Bands overlap with {previous.handle}: {gap:.2f} apart, which is "
+                    "inside the range the evidence leaves open. The order is real but "
+                    "thin, and worth confirming by reading both."
+                )
+            else:
                 tie_group += 1
-                group_rank = index + 1
         rows.append(
             ComparisonRow(
                 handle=candidate.handle,
-                rank=group_rank,
+                # Every candidate gets their own place. A recruiter needs a list to
+                # work down; overlapping bands are a caveat on a position, not a
+                # reason to refuse to give one.
+                rank=index + 1,
                 tie_group=tie_group,
                 score=candidate,
                 drivers=_drivers(candidate, medians),
+                separated_weakly=weakly,
+                separation_note=note,
             )
         )
 
