@@ -130,8 +130,12 @@ uvicorn veriquill.api.main:app --reload   # terminal one
 cd ui && npm install && npm run dev       # terminal two
 ```
 
-Open `http://localhost:5173/?comparison=1`. The dev server proxies `/api` to the
-API on port 8000.
+`http://localhost:5173/` is the public page; the review screen is at
+`http://localhost:5173/review.html?comparison=1`. The dev server proxies `/api` to
+the API on port 8000. Note that Vite binds IPv6 `localhost`, not `127.0.0.1`.
+
+Design decisions for both surfaces are recorded in `DESIGN.md`, product truth in
+`PRODUCT.md`.
 
 Every candidate's confidence band is drawn on one shared axis, so where two bands
 overlap you can see that the evidence does not separate those candidates — tied
