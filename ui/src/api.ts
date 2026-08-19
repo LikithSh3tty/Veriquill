@@ -113,6 +113,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(detail, response.status);
   }
 
+  // A 200 carrying something that is not JSON means the request never reached
+  // the API — a dev proxy serving index.html, say. Name that here, rather than
+  // handing null to a caller that will dereference it three layers away.
+  if (body === null || typeof body !== "object") {
+    throw new ApiError(
+      `${path} returned a response that was not JSON. Is the API reachable behind /api?`,
+      response.status,
+    );
+  }
+
   return body as T;
 }
 

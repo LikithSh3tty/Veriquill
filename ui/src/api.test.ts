@@ -95,6 +95,25 @@ describe("ApiError", () => {
   });
 });
 
+describe("a broken environment", () => {
+  it("names the problem when a 200 carries something that is not JSON", async () => {
+    // The dev proxy misrouting to index.html used to surface as an unrelated
+    // TypeError three layers away. It should name itself here instead.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError("Unexpected token <");
+        },
+      }),
+    );
+
+    await expect(fetchAudit(1)).rejects.toThrow(/not JSON/);
+  });
+});
+
 describe("fetchAudit", () => {
   it("returns the log in the order the server gave it", async () => {
     vi.stubGlobal(
