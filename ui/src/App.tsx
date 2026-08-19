@@ -178,9 +178,10 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
 
           <h1>Where the evidence places them</h1>
           <p className="app__lede">
-            Each bar is the range the evidence supports, not a single score.
-            Where bars overlap, Veriquill cannot separate those candidates and
-            says so rather than guessing.
+            Each bar is the range the evidence supports, not a single score. The
+            order is always explicit; a row marked “narrow gap” sits closer to the
+            one above it than the evidence firmly carries, so read both before
+            deciding between them.
           </p>
           {result === null && problem === null ? (
             // "Nobody has been ranked" and "the answer has not arrived yet" are

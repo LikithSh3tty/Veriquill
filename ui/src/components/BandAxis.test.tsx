@@ -33,10 +33,22 @@ describe("BandAxis", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 
-  it("marks candidates in the same tie group as tied", () => {
-    render(<BandAxis rows={[row("alice", 0.9, 0.2, 1, 0), row("bob", 0.88, 0.2, 1, 0)]} />);
+  it("marks a narrow gap without collapsing the order", () => {
+    const alice = row("alice", 0.9, 0.2, 1, 0);
+    const bob = { ...row("bob", 0.88, 0.2, 2, 0), separated_weakly: true };
 
-    expect(screen.getAllByText(/tied/i).length).toBeGreaterThan(0);
+    render(<BandAxis rows={[alice, bob]} />);
+
+    // The order still reads 1, 2 — the caveat rides on the row that earned it.
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText(/narrow gap/i)).toBeInTheDocument();
+  });
+
+  it("says nothing about a gap the evidence carries comfortably", () => {
+    render(<BandAxis rows={[row("alice", 0.9, 0.02, 1, 0), row("bob", 0.2, 0.02, 2, 1)]} />);
+
+    expect(screen.queryByText(/narrow gap/i)).not.toBeInTheDocument();
   });
 
   it("does not call two separable candidates tied", () => {

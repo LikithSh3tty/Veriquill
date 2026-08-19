@@ -24,19 +24,6 @@ function percent(value: number): string {
   return `${(value * 100).toFixed(2)}%`;
 }
 
-function groupByTie(rows: RankedRow[]): RankedRow[][] {
-  const groups: RankedRow[][] = [];
-  for (const row of rows) {
-    const last = groups[groups.length - 1];
-    if (last && last[0].tie_group === row.tie_group) {
-      last.push(row);
-    } else {
-      groups.push([row]);
-    }
-  }
-  return groups;
-}
-
 function Row({
   row,
   selected,
@@ -125,23 +112,11 @@ export function BandAxis({ rows, selected, onSelect }: Props) {
         </span>
       </div>
 
-      {groupByTie(rows).map((group) => (
-        <div
-          key={`${group[0].tie_group}`}
-          className={`tie-group${group.length > 1 ? " tie-group--tied" : ""}`}
-        >
-          {group.length > 1 ? (
-            <p className="tie-group__note">
-              tied — the evidence does not separate these {group.length}
-            </p>
-          ) : null}
-          <ol className="band-axis__rows">
-            {group.map((row) => (
-              <Row key={row.handle} row={row} selected={selected} onSelect={onSelect} />
-            ))}
-          </ol>
-        </div>
-      ))}
+      <ol className="band-axis__rows">
+        {rows.map((row) => (
+          <Row key={row.handle} row={row} selected={selected} onSelect={onSelect} />
+        ))}
+      </ol>
     </div>
   );
 }
