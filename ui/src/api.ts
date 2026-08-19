@@ -93,9 +93,14 @@ export type AuditRow = {
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData sets its own multipart boundary. Forcing a JSON content type onto
+  // an upload strips that boundary and the server sees a malformed body.
+  const isForm = init?.body instanceof FormData;
   const response = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: isForm
+      ? (init?.headers ?? {})
+      : { "Content-Type": "application/json", ...init?.headers },
   });
 
   let body: unknown = null;
@@ -172,4 +177,66 @@ export async function fetchDossiers(id: number): Promise<Record<string, DossierP
     `/comparisons/${id}/dossiers`,
   );
   return payload.dossiers;
+}
+
+export type IntakeJob = {
+  id: string;
+  handle: string;
+  status: "queued" | "running" | "done" | "failed";
+  error: string | null;
+  dossier_id: number | null;
+  created_at: string;
+  finished_at: string | null;
+};
+
+export type StoredCandidate = {
+  handle: string;
+  dossier_id: number;
+  stored_at: string;
+  flags: number;
+};
+
+/** Start analysing a candidate. Returns a job to poll, not a finished dossier. */
+export async function addCandidate(
+  handle: string,
+  files: { resume?: File | null; linkedin?: File | null } = {},
+): Promise<IntakeJob> {
+  const form = new FormData();
+  form.append("handle", handle);
+  if (files.resume) form.append("resume", files.resume);
+  if (files.linkedin) form.append("linkedin", files.linkedin);
+
+  // FormData sets its own multipart boundary; forcing a Content-Type breaks it.
+  const payload = await request<{ job: IntakeJob }>("/candidates", {
+    method: "POST",
+    body: form,
+    headers: {},
+  });
+  return payload.job;
+}
+
+export async function fetchIntakeJob(id: string): Promise<IntakeJob> {
+  const payload = await request<{ job: IntakeJob }>(`/candidates/jobs/${id}`);
+  return payload.job;
+}
+
+export async function fetchCandidates(): Promise<StoredCandidate[]> {
+  const payload = await request<{ candidates: StoredCandidate[] }>("/candidates");
+  return payload.candidates;
+}
+
+export async function createComparison(
+  rubric: string,
+  candidates: string[],
+): Promise<number> {
+  const payload = await request<{ comparison_id: number }>("/comparisons", {
+    method: "POST",
+    body: JSON.stringify({ rubric, candidates }),
+  });
+  return payload.comparison_id;
+}
+
+export async function fetchRubrics(): Promise<{ name: string }[]> {
+  const payload = await request<{ rubrics: { name: string }[] }>("/rubrics");
+  return payload.rubrics;
 }

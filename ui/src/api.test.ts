@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, approve, fetchAudit, fetchComparison, recordReview } from "./api";
+import {
+  ApiError,
+  addCandidate,
+  approve,
+  createComparison,
+  fetchAudit,
+  fetchCandidates,
+  fetchComparison,
+  fetchIntakeJob,
+  recordReview,
+} from "./api";
 
 function respondWith(status: number, body: unknown) {
   return vi.fn().mockResolvedValue({
@@ -130,5 +140,98 @@ describe("fetchAudit", () => {
     const log = await fetchAudit(1);
 
     expect(log.map((row) => row.action)).toEqual(["flag_dismiss", "approve"]);
+  });
+});
+
+describe("intake", () => {
+  it("posts the handle as form data, not JSON", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ job: { id: "j1", handle: "octocat", status: "queued" } }),
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    const job = await addCandidate("octocat");
+
+    const [, init] = fetcher.mock.calls[0];
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("handle")).toBe("octocat");
+    expect(job.status).toBe("queued");
+  });
+
+  it("does not force a content type that would break the upload boundary", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ job: { id: "j1", handle: "octocat", status: "queued" } }),
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    await addCandidate("octocat", {
+      resume: new File(["cv"], "cv.pdf", { type: "application/pdf" }),
+    });
+
+    const [, init] = fetcher.mock.calls[0];
+    expect(init.headers?.["Content-Type"]).toBeUndefined();
+    expect((init.body as FormData).get("resume")).toBeInstanceOf(File);
+  });
+
+  it("surfaces a refused upload with the server's own words", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ detail: ".exe is not a supported format" }),
+      }),
+    );
+
+    await expect(addCandidate("octocat")).rejects.toThrow(/not a supported format/);
+  });
+
+  it("reads a job's progress", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          job: { id: "j1", handle: "octocat", status: "running", error: null },
+        }),
+      }),
+    );
+
+    expect((await fetchIntakeJob("j1")).status).toBe("running");
+  });
+
+  it("lists the candidates that can be ranked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [{ handle: "alice", dossier_id: 2, stored_at: "now", flags: 1 }],
+        }),
+      }),
+    );
+
+    expect((await fetchCandidates()).map((c) => c.handle)).toEqual(["alice"]);
+  });
+
+  it("creates a comparison and returns its id", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ comparison_id: 4 }),
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    expect(await createComparison("backend", ["alice", "bob"])).toBe(4);
+    expect(JSON.parse(String(fetcher.mock.calls[0][1].body))).toMatchObject({
+      rubric: "backend",
+      candidates: ["alice", "bob"],
+    });
   });
 });
