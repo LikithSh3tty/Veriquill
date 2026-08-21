@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     github_token: SecretStr = SecretStr("")
     api_base_url: str = "https://api.github.com"
     data_dir: Path = Path(".veriquill")
+    ui_dist: Path = Field(
+        default=Path("ui/dist"),
+        description=(
+            "Built interface served at the root. Absent in a checkout that has "
+            "not run the frontend build, in which case only the API is served."
+        ),
+    )
 
     # Claim refinement (optional; the structural parsers always run without it)
     claim_model: str = Field(

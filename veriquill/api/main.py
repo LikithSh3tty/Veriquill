@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from veriquill import __version__
+from veriquill.api.interface import mount_interface
 from veriquill.config import get_settings
 from veriquill.db import init_db, make_engine, make_session_factory
 from veriquill.intake import (
@@ -376,3 +377,7 @@ app.include_router(router)
 # The second copy stays out of the schema: it is the same surface, and listing it
 # twice would leave a reader guessing which one is authoritative.
 app.include_router(router, prefix="/api", include_in_schema=False)
+
+# Last, so it catches only what the API did not: a checkout with no build serves
+# the API alone, and the pages 404 rather than the process refusing to start.
+mount_interface(app, get_settings().ui_dist)
