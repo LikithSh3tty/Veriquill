@@ -50,3 +50,4 @@ demo_*.txt
 ui/node_modules/
 ui/dist/
 ui/.vite/
+ui/tsconfig.tsbuildinfo

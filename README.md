@@ -195,6 +195,39 @@ npm run build   # production bundle
 npm run lint    # typecheck
 ```
 
+## Deployment
+
+One container serves the API, the CLI, and the built interface behind a single
+origin, so the browser's `/api` calls never leave it.
+
+```bash
+docker build -t veriquill .
+docker run -p 8000:8000   -e VERIQUILL_GITHUB_TOKEN=ghp_yourtoken   -v veriquill-data:/data   veriquill
+```
+
+The public page is then at `http://localhost:8000/` and the review screen at
+`http://localhost:8000/review.html?comparison=1`.
+
+**Mount a volume on `/data`.** Clones, caches, and the SQLite database live there;
+a container that loses it loses every stored dossier. Git is installed in the
+image because the provenance engine reads real commit history out of a clone.
+
+Without Docker, build the interface once and point the API at it:
+
+```bash
+cd ui && npm ci && npm run build && cd ..
+uvicorn veriquill.api.main:app --host 0.0.0.0 --port 8000
+```
+
+`VERIQUILL_UI_DIST` sets where the built files are read from (default `ui/dist`).
+If they are absent the API starts anyway and serves no pages, which is what the
+tests and the CLI use. Every endpoint answers both at the root and under `/api`;
+the root is the documented surface, and the `/api` copy exists so the interface
+and the API can share one origin.
+
+There is still no authentication in front of any of this. Until there is, run it
+somewhere only the hiring team can reach.
+
 ## Fairness and compliance
 
 Veriquill treats itself as an automated employment decision tool and ships the
