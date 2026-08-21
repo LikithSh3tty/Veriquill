@@ -40,6 +40,25 @@ def test_unknown_run_returns_404():
     assert client.get("/runs/does-not-exist").status_code == 404
 
 
+def test_the_same_api_answers_under_the_prefix_the_browser_bundle_uses():
+    """The built interface calls /api/... on its own origin. Serving it from
+    anywhere else would need a second host and a CORS policy to match."""
+    client = TestClient(app)
+    root = client.get("/health")
+    prefixed = client.get("/api/health")
+    assert prefixed.status_code == 200
+    assert prefixed.json() == root.json()
+
+
+def test_the_prefixed_copy_stays_out_of_the_schema():
+    """One surface, documented once: a reader should not have to guess which of
+    two identical paths is the real one."""
+    client = TestClient(app)
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/health" in paths
+    assert not [path for path in paths if path.startswith("/api/")]
+
+
 def _seeded_client(tmp_path, monkeypatch, flagged=True):
     """An API client pointed at a temporary database holding one stored dossier."""
     from tests.test_dimensions import flag, make_dossier

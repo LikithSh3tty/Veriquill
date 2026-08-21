@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -49,6 +49,11 @@ from veriquill.store import (
 )
 
 app = FastAPI(title="Veriquill", version=__version__)
+
+# Every route is defined once and served twice: at the root, where the CLI and
+# the docs address it, and under /api, where the browser bundle addresses it so
+# a single origin can serve the interface and the API it talks to.
+router = APIRouter()
 
 # Analysis runs stay in-process: they are large, transient, and superseded by the
 # dossier the moment one is built. Everything a reviewer acts on lives in SQLite.
@@ -96,12 +101,12 @@ class JobDescriptionRequest(BaseModel):
     text: str
 
 
-@app.get("/health")
+@router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
-@app.post("/analyse")
+@router.post("/analyse")
 async def start_analysis(request: AnalyseRequest) -> dict[str, str]:
     run_id = uuid4().hex
     settings = get_settings()
@@ -110,7 +115,7 @@ async def start_analysis(request: AnalyseRequest) -> dict[str, str]:
     return {"run_id": run_id, "status": "complete"}
 
 
-@app.get("/runs/{run_id}")
+@router.get("/runs/{run_id}")
 def get_run(run_id: str) -> dict[str, Any]:
     summary = _RUNS.get(run_id)
     if summary is None:
@@ -118,7 +123,7 @@ def get_run(run_id: str) -> dict[str, Any]:
     return {"run_id": run_id, "summary": summary}
 
 
-@app.post("/rubrics")
+@router.post("/rubrics")
 def create_rubric(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         rubric = Rubric.from_dict(payload)
@@ -130,13 +135,13 @@ def create_rubric(payload: dict[str, Any]) -> dict[str, Any]:
     return {"rubric": rubric.to_dict()}
 
 
-@app.get("/rubrics")
+@router.get("/rubrics")
 def read_rubrics() -> dict[str, Any]:
     with _session() as session:
         return {"rubrics": [rubric.to_dict() for rubric in list_rubrics(session)]}
 
 
-@app.post("/comparisons")
+@router.post("/comparisons")
 def create_comparison_endpoint(request: ComparisonRequest) -> dict[str, Any]:
     with _session() as session:
         try:
@@ -147,7 +152,7 @@ def create_comparison_endpoint(request: ComparisonRequest) -> dict[str, Any]:
         return {"comparison_id": comparison.id, "result": result}
 
 
-@app.get("/comparisons/{comparison_id}")
+@router.get("/comparisons/{comparison_id}")
 def read_comparison(comparison_id: int) -> dict[str, Any]:
     with _session() as session:
         try:
@@ -160,7 +165,7 @@ def read_comparison(comparison_id: int) -> dict[str, Any]:
         }
 
 
-@app.post("/comparisons/{comparison_id}/review")
+@router.post("/comparisons/{comparison_id}/review")
 def review_comparison(comparison_id: int, request: ReviewRequest) -> dict[str, Any]:
     with _session() as session:
         try:
@@ -182,7 +187,7 @@ def review_comparison(comparison_id: int, request: ReviewRequest) -> dict[str, A
         return {"comparison_id": comparison.id, "status": comparison.status}
 
 
-@app.post("/comparisons/{comparison_id}/approve")
+@router.post("/comparisons/{comparison_id}/approve")
 def approve_endpoint(comparison_id: int, request: ApprovalRequest) -> dict[str, Any]:
     with _session() as session:
         try:
@@ -196,7 +201,7 @@ def approve_endpoint(comparison_id: int, request: ApprovalRequest) -> dict[str, 
         return {"comparison_id": comparison.id, "status": comparison.status}
 
 
-@app.get("/comparisons/{comparison_id}/export")
+@router.get("/comparisons/{comparison_id}/export")
 def export_endpoint(comparison_id: int) -> dict[str, Any]:
     with _session() as session:
         try:
@@ -209,7 +214,7 @@ def export_endpoint(comparison_id: int) -> dict[str, Any]:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@app.get("/comparisons/{comparison_id}/dossiers")
+@router.get("/comparisons/{comparison_id}/dossiers")
 def read_dossiers(comparison_id: int) -> dict[str, Any]:
     """The dossiers behind a comparison, keyed by candidate.
 
@@ -231,7 +236,7 @@ def read_dossiers(comparison_id: int) -> dict[str, Any]:
         }
 
 
-@app.get("/comparisons/{comparison_id}/audit")
+@router.get("/comparisons/{comparison_id}/audit")
 def audit_endpoint(comparison_id: int) -> dict[str, Any]:
     with _session() as session:
         try:
@@ -280,7 +285,7 @@ async def _run_intake(
                 shutil.rmtree(path.parent, ignore_errors=True)
 
 
-@app.post("/candidates", status_code=202)
+@router.post("/candidates", status_code=202)
 async def add_candidate(
     background: BackgroundTasks,
     handle: str = Form(...),
@@ -325,7 +330,7 @@ async def add_candidate(
     return {"job": job.to_dict()}
 
 
-@app.post("/rubrics/from-job-description")
+@router.post("/rubrics/from-job-description")
 def rubric_from_job_description(request: JobDescriptionRequest) -> dict[str, Any]:
     """Derive a rubric from a posting, and say which phrases raised what.
 
@@ -347,7 +352,7 @@ def rubric_from_job_description(request: JobDescriptionRequest) -> dict[str, Any
     }
 
 
-@app.get("/candidates/jobs/{job_id}")
+@router.get("/candidates/jobs/{job_id}")
 def read_intake_job(job_id: str) -> dict[str, Any]:
     try:
         return {"job": _JOBS.get(job_id).to_dict()}
@@ -355,13 +360,19 @@ def read_intake_job(job_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/candidates/jobs")
+@router.get("/candidates/jobs")
 def read_intake_jobs() -> dict[str, Any]:
     return {"jobs": [job.to_dict() for job in _JOBS.list()]}
 
 
-@app.get("/candidates")
+@router.get("/candidates")
 def read_candidates() -> dict[str, Any]:
     """Everyone with a stored dossier, and so everyone who can be ranked."""
     with _session() as session:
         return {"candidates": list_candidates(session)}
+
+
+app.include_router(router)
+# The second copy stays out of the schema: it is the same surface, and listing it
+# twice would leave a reader guessing which one is authoritative.
+app.include_router(router, prefix="/api", include_in_schema=False)
