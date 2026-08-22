@@ -184,3 +184,30 @@ class ReviewAction(Base):
     reason: Mapped[str] = mapped_column(Text)
     revision: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class IntakeJobRecord(Base):
+    """An analysis started from the interface.
+
+    Jobs used to live in a dict on the API process. That was defensible while a
+    lost job cost a page refresh, but it was not what a lost job actually cost:
+    a restart mid-analysis left the browser polling an id the server no longer
+    knew, which reads as "this candidate was never submitted" rather than "this
+    analysis was interrupted". Those are different facts and a hiring tool does
+    not get to confuse them.
+
+    Rows here are working state, not evidence. The dossier the job writes is
+    what a decision rests on, and it lives in `dossiers`.
+    """
+
+    __tablename__ = "intake_jobs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    handle: Mapped[str] = mapped_column(String(39), index=True)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    dossier_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )

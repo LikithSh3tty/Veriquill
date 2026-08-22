@@ -380,6 +380,26 @@ types, and every endpoint is open. Until that changes, run it somewhere only the
 team can reach — a deployment that matters must supply an authenticated identity, because
 the audit log is only as trustworthy as the name written into it.
 
+What is in place is the floor beneath authentication, not a replacement for it. Request
+bodies are capped before anything reads them, including chunked bodies that declare no
+length; uploads are read in bounded chunks so an oversized file costs one chunk and a
+refusal rather than the memory it claimed; job descriptions are length-capped; and each
+client IP gets a request budget, a small one on the endpoints that clone a portfolio and
+a larger one on ordinary reads. All four are tunable, and setting a limit to `0` turns it
+off for a deployment that already has its own gateway.
+
+| Setting | Default | What it bounds |
+| --- | --- | --- |
+| `VERIQUILL_API_MAX_REQUEST_BYTES` | 6 MB | any request body |
+| `VERIQUILL_API_RATE_LIMIT` | 60/min | ordinary reads and writes, per client |
+| `VERIQUILL_API_ANALYSIS_RATE_LIMIT` | 10/min | endpoints that start a clone, per client |
+| `VERIQUILL_MAX_JOB_DESCRIPTION_CHARS` | 20,000 | a posting handed to the rubric deriver |
+
+The budget is per process and keyed on the socket address, not on a forwarded header —
+a header is caller-supplied and would let anyone spend anyone else's budget. Behind a
+trusted proxy that means the proxy, which is a real limitation and the reason this is a
+floor rather than a defence.
+
 On the data side: uploaded documents are read once and deleted, clones are ephemeral,
 protected attributes are redacted before anything touches disk, and the optional model
 calls only ever see authored code and the candidate's own documents.

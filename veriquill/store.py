@@ -9,16 +9,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from veriquill.intake import IntakeError, Job, validate_handle
 from veriquill.models import (
     ComparisonEntry,
     ComparisonRecord,
     DossierRecord,
+    IntakeJobRecord,
     RubricRecord,
 )
 from veriquill.rank.score import score_candidate
@@ -184,3 +189,111 @@ def list_candidates(session: Session) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _as_utc(moment: datetime | None) -> datetime | None:
+    """SQLite drops the offset. Reattach UTC rather than hand back a naive time."""
+    if moment is None:
+        return None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
+
+
+def _to_job(record: IntakeJobRecord) -> Job:
+    created = _as_utc(record.created_at)
+    return Job(
+        id=record.id,
+        handle=record.handle,
+        status=record.status,  # type: ignore[arg-type]
+        error=record.error,
+        dossier_id=record.dossier_id,
+        created_at=created if created is not None else _now(),
+        finished_at=_as_utc(record.finished_at),
+    )
+
+
+class SqlJobStore:
+    """Intake jobs that outlive the process that started them.
+
+    The in-memory store was fine until you asked what a restart actually costs.
+    The browser polls a job id; a process that forgot the id answers 404, and a
+    404 reads as "this candidate was never submitted" rather than "this analysis
+    was interrupted". Those are different facts, and a tool that exists to keep
+    claims and evidence straight does not get to blur them.
+
+    Jobs are working state, not evidence. What a decision rests on is the
+    dossier, which is written by the job and stored separately.
+    """
+
+    def __init__(self, session_factory: Callable[[], AbstractContextManager[Session]]) -> None:
+        self._session_factory = session_factory
+
+    def create(self, handle: str) -> Job:
+        handle = validate_handle(handle)
+        job = Job(id=uuid.uuid4().hex, handle=handle)
+        with self._session_factory() as session:
+            session.add(
+                IntakeJobRecord(
+                    id=job.id,
+                    handle=job.handle,
+                    status=job.status,
+                    created_at=job.created_at,
+                )
+            )
+        return job
+
+    def get(self, job_id: str) -> Job:
+        with self._session_factory() as session:
+            record = session.get(IntakeJobRecord, job_id)
+            if record is None:
+                raise IntakeError(f"no intake job {job_id!r}")
+            return _to_job(record)
+
+    def list(self) -> list[Job]:
+        with self._session_factory() as session:
+            records = session.scalars(
+                select(IntakeJobRecord).order_by(IntakeJobRecord.created_at.desc())
+            ).all()
+            return [_to_job(record) for record in records]
+
+    def _update(self, job_id: str, **changes: Any) -> Job:
+        with self._session_factory() as session:
+            record = session.get(IntakeJobRecord, job_id)
+            if record is None:
+                raise IntakeError(f"no intake job {job_id!r}")
+            for attribute, value in changes.items():
+                setattr(record, attribute, value)
+            session.flush()
+            return _to_job(record)
+
+    def start(self, job_id: str) -> Job:
+        return self._update(job_id, status="running")
+
+    def finish(self, job_id: str, dossier_id: int) -> Job:
+        return self._update(
+            job_id, status="done", dossier_id=dossier_id, finished_at=_now()
+        )
+
+    def fail(self, job_id: str, error: str) -> Job:
+        return self._update(job_id, status="failed", error=error, finished_at=_now())
+
+    def abandon_unfinished(self, reason: str) -> int:
+        """Fail every job that was still open when the process last stopped.
+
+        Persistence without this would be worse than no persistence: a job left
+        "running" by a crash would poll as running forever, and the interface
+        would show work in progress that no process is doing. Say plainly that
+        it was interrupted, so the recruiter resubmits instead of waiting.
+
+        Call it at startup, before anything new is accepted.
+        """
+        with self._session_factory() as session:
+            stale = session.scalars(
+                select(IntakeJobRecord).where(
+                    IntakeJobRecord.status.in_(("queued", "running"))
+                )
+            ).all()
+            for record in stale:
+                record.status = "failed"
+                record.error = reason
+                record.finished_at = _now()
+            return len(stale)

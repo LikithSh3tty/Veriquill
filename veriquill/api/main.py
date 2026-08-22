@@ -13,25 +13,41 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from veriquill import __version__
 from veriquill.api.interface import mount_interface
+from veriquill.api.limits import (
+    BodySizeLimitMiddleware,
+    FixedWindowLimiter,
+    LimitExceeded,
+    enforce,
+    read_capped,
+)
 from veriquill.config import get_settings
 from veriquill.db import init_db, make_engine, make_session_factory
 from veriquill.intake import (
     LINKEDIN_SUFFIXES,
+    MAX_UPLOAD_BYTES,
     RESUME_SUFFIXES,
     IntakeError,
-    JobStore,
     stage_upload,
 )
 from veriquill.jobspec import derive_rubric, read_job_description
@@ -40,6 +56,7 @@ from veriquill.review import ReviewError, audit_log, effective_result, export_pa
 from veriquill.review import approve as approve_comparison
 from veriquill.rubric import Rubric, RubricError
 from veriquill.store import (
+    SqlJobStore,
     StoreError,
     create_comparison,
     get_comparison,
@@ -49,7 +66,41 @@ from veriquill.store import (
     save_rubric,
 )
 
-app = FastAPI(title="Veriquill", version=__version__)
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Close out whatever the last process left open.
+
+    Persisting jobs without this would be worse than not persisting them: a job
+    left "running" by a restart would poll as running forever, and the interface
+    would show work in progress that nothing is doing. Say it was interrupted so
+    the recruiter resubmits.
+    """
+    _JOBS.abandon_unfinished(
+        "the server restarted while this analysis was running; submit the candidate again"
+    )
+    yield
+
+
+app = FastAPI(title="Veriquill", version=__version__, lifespan=_lifespan)
+
+_limit_settings = get_settings()
+app.add_middleware(
+    BodySizeLimitMiddleware, max_bytes=_limit_settings.api_max_request_bytes
+)
+
+# Two budgets, because two costs. Reading a stored comparison is cheap and a
+# reviewer clicking through a cohort should never hit a wall; starting an
+# analysis clones a portfolio and walks its history, so a handful per minute is
+# already generous for a tool one human drives.
+_reads = FixedWindowLimiter(
+    limit=_limit_settings.api_rate_limit,
+    window_seconds=_limit_settings.api_rate_limit_window_seconds,
+)
+_analyses = FixedWindowLimiter(
+    limit=_limit_settings.api_analysis_rate_limit,
+    window_seconds=_limit_settings.api_rate_limit_window_seconds,
+)
 
 # Every route is defined once and served twice: at the root, where the CLI and
 # the docs address it, and under /api, where the browser bundle addresses it so
@@ -60,8 +111,11 @@ router = APIRouter()
 # dossier the moment one is built. Everything a reviewer acts on lives in SQLite.
 _RUNS: dict[str, dict[str, Any]] = {}
 
-# Intake jobs are transient; the dossier each one writes is what persists.
-_JOBS = JobStore()
+# Intake jobs are persisted. They are working state rather than evidence, but a
+# job the process forgets answers 404 to a browser that is polling it, and a 404
+# reads as "this candidate was never submitted" rather than "this analysis was
+# interrupted". Those are different facts.
+_JOBS = SqlJobStore(lambda: _session())
 
 
 @contextmanager
@@ -108,7 +162,8 @@ def health() -> dict[str, str]:
 
 
 @router.post("/analyse")
-async def start_analysis(request: AnalyseRequest) -> dict[str, str]:
+async def start_analysis(request: AnalyseRequest, http_request: Request) -> dict[str, str]:
+    enforce(_analyses, http_request)
     run_id = uuid4().hex
     settings = get_settings()
     summary = await analyse_candidate(request.handle, settings)
@@ -143,7 +198,10 @@ def read_rubrics() -> dict[str, Any]:
 
 
 @router.post("/comparisons")
-def create_comparison_endpoint(request: ComparisonRequest) -> dict[str, Any]:
+def create_comparison_endpoint(
+    request: ComparisonRequest, http_request: Request
+) -> dict[str, Any]:
+    enforce(_reads, http_request)
     with _session() as session:
         try:
             comparison = create_comparison(session, request.rubric, request.candidates)
@@ -289,6 +347,7 @@ async def _run_intake(
 @router.post("/candidates", status_code=202)
 async def add_candidate(
     background: BackgroundTasks,
+    http_request: Request,
     handle: str = Form(...),
     job_description: str = Form(""),
     resume: UploadFile | None = File(None),
@@ -298,8 +357,18 @@ async def add_candidate(
 
     Cloning a portfolio takes minutes, so this cannot be a request that waits.
     """
+    enforce(_analyses, http_request)
     settings = get_settings()
     settings.ensure_dirs()
+
+    if len(job_description) > settings.max_job_description_chars:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "the job description is longer than the "
+                f"{settings.max_job_description_chars} character limit"
+            ),
+        )
 
     try:
         job = _JOBS.create(handle)
@@ -308,18 +377,33 @@ async def add_candidate(
 
     staging = Path(tempfile.mkdtemp(prefix="veriquill-intake-", dir=settings.workdir))
     try:
+        # Read bounded. `UploadFile.read()` buffers the whole body before
+        # anything checks its size, which makes stage_upload's cap useless as a
+        # defence: the memory is spent by the time the limit is consulted.
         resume_path = (
-            stage_upload(resume.filename or "", await resume.read(), staging, RESUME_SUFFIXES)
+            stage_upload(
+                resume.filename or "",
+                await read_capped(resume, MAX_UPLOAD_BYTES, "the resume"),
+                staging,
+                RESUME_SUFFIXES,
+            )
             if resume is not None and resume.filename
             else None
         )
         linkedin_path = (
             stage_upload(
-                linkedin.filename or "", await linkedin.read(), staging, LINKEDIN_SUFFIXES
+                linkedin.filename or "",
+                await read_capped(linkedin, MAX_UPLOAD_BYTES, "the LinkedIn export"),
+                staging,
+                LINKEDIN_SUFFIXES,
             )
             if linkedin is not None and linkedin.filename
             else None
         )
+    except LimitExceeded as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        _JOBS.fail(job.id, exc.detail)
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except IntakeError as exc:
         shutil.rmtree(staging, ignore_errors=True)
         _JOBS.fail(job.id, str(exc))
@@ -332,13 +416,24 @@ async def add_candidate(
 
 
 @router.post("/rubrics/from-job-description")
-def rubric_from_job_description(request: JobDescriptionRequest) -> dict[str, Any]:
+def rubric_from_job_description(
+    request: JobDescriptionRequest, http_request: Request
+) -> dict[str, Any]:
     """Derive a rubric from a posting, and say which phrases raised what.
 
     The derivation is returned alongside the rubric so a recruiter can check the
     reasoning before ranking anyone against it, and so a candidate can be told
     why a dimension counted for what it did.
     """
+    enforce(_reads, http_request)
+
+    limit = get_settings().max_job_description_chars
+    if len(request.text) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=f"the job description is longer than the {limit} character limit",
+        )
+
     try:
         rubric = derive_rubric(request.name, request.text)
     except (ValueError, RubricError) as exc:

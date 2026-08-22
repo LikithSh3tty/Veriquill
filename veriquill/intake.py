@@ -61,12 +61,30 @@ class Job:
         }
 
 
+def validate_handle(handle: str) -> str:
+    """Return the handle, or say why it is not one.
+
+    Both job stores call this, so a handle the in-memory store accepts is one
+    the persistent store accepts too. A validation rule that lives in only one
+    of two implementations is a rule that will eventually disagree with itself.
+    """
+    handle = (handle or "").strip()
+    if not handle:
+        raise IntakeError("enter a GitHub username")
+    if not _HANDLE.match(handle):
+        raise IntakeError(
+            f"{handle!r} is not a GitHub username: letters, digits and single "
+            "hyphens only, up to 39 characters"
+        )
+    return handle
+
+
 class JobStore:
     """In-process job state.
 
-    Intake jobs are transient by nature: what survives a restart is the dossier
-    the job wrote, which lives in SQLite. A lost job record costs a page refresh,
-    not evidence.
+    Kept for callers that want no database: a CLI run, a test. The API uses the
+    persistent store in `veriquill.store`, because a job this one loses looks to
+    the browser like a candidate that was never submitted.
     """
 
     def __init__(self) -> None:
@@ -74,15 +92,7 @@ class JobStore:
         self._order: list[str] = []
 
     def create(self, handle: str) -> Job:
-        handle = (handle or "").strip()
-        if not handle:
-            raise IntakeError("enter a GitHub username")
-        if not _HANDLE.match(handle):
-            raise IntakeError(
-                f"{handle!r} is not a GitHub username: letters, digits and single "
-                "hyphens only, up to 39 characters"
-            )
-
+        handle = validate_handle(handle)
         job = Job(id=uuid.uuid4().hex, handle=handle)
         self._jobs[job.id] = job
         self._order.append(job.id)

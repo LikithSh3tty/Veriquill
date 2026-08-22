@@ -72,6 +72,37 @@ class Settings(BaseSettings):
     )
     max_retry_attempts: int = 5
 
+    # Caps on the HTTP surface. There is no authentication in front of it, so
+    # these keep a misconfigured deployment costing a 413 or a 429 rather than
+    # the process. Set a limit to 0 to disable it behind your own gateway.
+    api_max_request_bytes: int = Field(
+        default=6 * 1024 * 1024,
+        description=(
+            "Largest request body accepted. Sits above the upload cap because a "
+            "multipart form carries the file plus its envelope."
+        ),
+    )
+    api_rate_limit: int = Field(
+        default=60,
+        description="Requests per window per client for ordinary reads and writes.",
+    )
+    api_analysis_rate_limit: int = Field(
+        default=10,
+        description=(
+            "Requests per window per client for endpoints that start work: each "
+            "one clones a portfolio, so the budget is much smaller. Sized for "
+            "one recruiter adding a cohort by hand, not for a crawler."
+        ),
+    )
+    api_rate_limit_window_seconds: int = 60
+    max_job_description_chars: int = Field(
+        default=20_000,
+        description=(
+            "Longest posting accepted. Derivation scans it once per phrase, so "
+            "an unbounded one is unbounded work."
+        ),
+    )
+
     # Concurrency and timeouts
     max_clone_concurrency: int = 4
     clone_timeout_seconds: int = 300
