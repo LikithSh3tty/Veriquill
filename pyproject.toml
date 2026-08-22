@@ -20,15 +20,19 @@ dependencies = [
     "ruff>=0.5",
     "pypdf>=4.2",
     "python-docx>=1.1",
-    "anthropic>=0.40",
     "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
+# The two model passes are optional, so the SDK behind them is too. A plain
+# install gives the deterministic tool, which is the product; `veriquill[llm]`
+# adds claim refinement and design review, both still off until switched on.
+llm = ["anthropic>=0.40"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "respx>=0.21",
+    "anthropic>=0.40",
 ]
 
 [project.scripts]

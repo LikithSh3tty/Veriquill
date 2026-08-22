@@ -33,12 +33,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Credentials for the two optional model passes. Set here so `.env` controls
+    # them the way it controls the GitHub token; left empty, the SDK falls back
+    # to its own resolution (ANTHROPIC_API_KEY, or a logged-in profile).
+    anthropic_api_key: SecretStr = SecretStr("")
+
     # Claim refinement (optional; the structural parsers always run without it)
     claim_model: str = Field(
         default="claude-opus-5",
         description="Model used to phrase claims the structural parser missed.",
     )
-    claim_refinement_enabled: bool = True
+    claim_refinement_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a model phrase claims the structural parser missed. Off by "
+            "default: it costs money and sends a candidate's document to a "
+            "third party, which is not something to start doing because a key "
+            "happened to be present in the environment."
+        ),
+    )
     claim_max_tokens: int = 16000
 
     # Optional design review (off by default; every metric stays deterministic)

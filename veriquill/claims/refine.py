@@ -20,6 +20,7 @@ from typing import Any
 from veriquill.claims.documents import Document
 from veriquill.claims.models import Claim, ClaimKind, ClaimSource
 from veriquill.config import Settings
+from veriquill.llm import build_client
 
 logger = logging.getLogger(__name__)
 
@@ -64,21 +65,12 @@ class ClaimRefiner:
         self._client = client if client is not None else self._build_client()
 
     def _build_client(self) -> Any | None:
-        """Construct an Anthropic client, or None when none can be resolved.
-
-        An unset API key does not mean there are no credentials: the SDK also
-        resolves an `ant auth login` profile. So construction is attempted and
-        only a failure is treated as unavailable.
-        """
-        if not self._settings.claim_refinement_enabled:
-            return None
-        try:
-            import anthropic
-
-            return anthropic.Anthropic()
-        except Exception:
-            logger.info("no Anthropic credentials resolved; claim refinement disabled")
-            return None
+        """Construct an Anthropic client, or None when this pass cannot run."""
+        return build_client(
+            self._settings,
+            enabled=self._settings.claim_refinement_enabled,
+            purpose="claim refinement",
+        )
 
     @property
     def available(self) -> bool:

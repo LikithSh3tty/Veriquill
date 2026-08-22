@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-438%20Python%20%2B%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-501%20Python%20%2B%20Vitest-brightgreen)
 
 </div>
 
@@ -124,9 +124,25 @@ quote a line that appears verbatim at the file and line it cites or it is discar
 severity is capped at medium and confidence at 0.5, so a judgment can never outrank
 something that was measured; it is told not to report metrics, because every number in
 the dossier comes from static analysis; and it only ever sees authored code, never
-vendored trees. With the setting off, or with no credentials resolved, the pipeline is
-fully deterministic. (A second optional call refines the *phrasing* of claims already
-extracted from the candidate's own documents. It invents nothing.)
+vendored trees.
+
+A second optional call, `VERIQUILL_CLAIM_REFINEMENT_ENABLED=true`, refines the
+*phrasing* of claims already extracted from the candidate's own documents. It invents
+nothing, every claim it returns must quote a line the document actually contains, and
+it only runs at all when a résumé or LinkedIn export is attached.
+
+**Three things have to be true before either one runs**, and if any is missing the pass
+is skipped with a log line rather than an error:
+
+1. the feature is switched on, and both default to off
+2. `pip install -e ".[llm]"` has been run, since `anthropic` is an optional dependency
+3. credentials resolve, from `VERIQUILL_ANTHROPIC_API_KEY` in `.env` or from whatever
+   the SDK finds for itself
+
+That last point matters more than it looks. A model pass costs money and sends a
+candidate's material to a third party, so neither should ever begin doing that just
+because an `ANTHROPIC_API_KEY` happened to be sitting in the environment. With nothing
+enabled the pipeline is fully deterministic, which is the default and the point.
 
 ## Project layout
 
@@ -173,6 +189,13 @@ python -m venv .venv
 .venv/Scripts/activate      # Windows; source .venv/bin/activate elsewhere
 pip install -e ".[dev]"
 cp .env.example .env        # then edit .env and add your token
+```
+
+That install gives you the whole deterministic tool. The two optional model passes
+need an extra, and stay switched off even once it is present:
+
+```bash
+pip install -e ".[llm]"
 ```
 
 ```bash

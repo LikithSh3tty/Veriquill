@@ -34,6 +34,7 @@ from veriquill.codeeval.detect import LanguageProfile
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
+from veriquill.llm import build_client
 
 logger = logging.getLogger(__name__)
 
@@ -96,15 +97,11 @@ class DesignReviewer:
         self._client = client if client is not None else self._build_client()
 
     def _build_client(self) -> Any | None:
-        if not self._settings.code_review_enabled:
-            return None
-        try:
-            import anthropic
-
-            return anthropic.Anthropic()
-        except Exception:
-            logger.info("no Anthropic credentials resolved; design review disabled")
-            return None
+        return build_client(
+            self._settings,
+            enabled=self._settings.code_review_enabled,
+            purpose="design review",
+        )
 
     @property
     def available(self) -> bool:
