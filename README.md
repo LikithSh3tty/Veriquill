@@ -18,7 +18,7 @@
 </div>
 
 A hiring tool that checks the work before it ranks the person. You give it a GitHub
-handle — optionally a résumé and a LinkedIn export too — and it clones the portfolio,
+handle (optionally a résumé and a LinkedIn export too) and it clones the portfolio,
 reads the real commit history, runs static analysis over the authored code, matches
 what the documents claim against what the repositories show, and writes a dossier
 where every single finding points at a commit, a file, or a line.
@@ -26,7 +26,7 @@ where every single finding points at a commit, a file, or a line.
 It answers the two questions generic screening tools skip: **is this work genuinely
 this candidate's own iterative effort**, and **is the code any good**. A bulk dump
 with no development history, a fork presented as original work, a résumé claiming
-five years of Django against three commits of it — those are the things it is built
+five years of Django against three commits of it: those are the things it is built
 to notice.
 
 The part I care most about is what it refuses to do. No model sits on the provenance,
@@ -34,25 +34,25 @@ code-evaluation, or ranking path: those are deterministic and reproducible, and 
 same input yields the same dossier every time. Nothing is exported until a named human
 approves it. Thin evidence widens a confidence band, it never lowers a score, so a
 candidate with private repositories reads as *we could not tell*, not *weak*. And a
-red flag is a question for the recruiter, never proof of wrongdoing — bulk-dump history
+red flag is a question for the recruiter, never proof of wrongdoing. Bulk-dump history
 looks identical whether a codebase was fabricated or simply developed locally and
 imported once.
 
 ## What it does
 
-- **Verifies provenance deterministically** — commit cadence, bulk dumps with no
+- **Verifies provenance deterministically.** Commit cadence, bulk dumps with no
   development history, forks presented as original work, template and dependency
   inflation, cross-profile duplication, and whether the candidate actually authored
   the commits they are being credited for.
-- **Evaluates code by static analysis** — cyclomatic complexity, security hygiene,
+- **Evaluates code by static analysis.** Cyclomatic complexity, security hygiene,
   lint compliance, dead modules nothing imports, and test quality measured by
   assertion meaningfulness rather than test count. Python is analysed in depth;
   other languages are detected, counted, and the output says so explicitly.
-- **Reconciles documents against evidence** — résumé and LinkedIn claims are extracted,
+- **Reconciles documents against evidence.** Résumé and LinkedIn claims are extracted,
   matched to repositories, and marked corroborated, uncorroborated, or contradicted,
   with the evidence attached either way.
-- **Ranks a cohort against a rubric** you weight over six fixed dimensions —
-  authenticity, code quality, claim corroboration, test quality, security, breadth —
+- **Ranks a cohort against a rubric** you weight over six fixed dimensions:
+  authenticity, code quality, claim corroboration, test quality, security, breadth,
   reading only stored dossiers, with no network call and no LLM.
 - **Blocks export behind a human gate.** Dismissals and band overrides never edit the
   machine result; they are recorded beside it with the actor and the reason, in an
@@ -80,7 +80,7 @@ rather than a convention: a `Finding` with empty evidence cannot be constructed.
         └────────┬────────┘   (nothing cloned to decide whether to clone it)
                  ▼
         ┌─────────────────┐
-        │  ephemeral      │  full clone — history needs blobs
+        │  ephemeral      │  full clone: history needs blobs
         │  clone          │
         └────────┬────────┘
        ┌─────────┴─────────┐
@@ -118,7 +118,7 @@ rather than a convention: a `Finding` with empty evidence cannot be constructed.
 
 **Design review is the one optional model call**, off by default. Set
 `VERIQUILL_CODE_REVIEW_ENABLED=true` and Claude phrases the judgment static analysis
-cannot reach — tangled responsibilities, decisions duplicated across modules, error
+cannot reach: tangled responsibilities, decisions duplicated across modules, error
 handling that hides failures. It runs under hard constraints: every observation must
 quote a line that appears verbatim at the file and line it cites or it is discarded;
 severity is capped at medium and confidence at 0.5, so a judgment can never outrank
@@ -138,7 +138,7 @@ Veriquill/
 │   ├── relevance.py          # which repos get cloned, and why
 │   ├── github/               # client, ETag cache, ephemeral clone, history reader
 │   ├── provenance/           # cadence, bulk_dump, fork_origin, inflation,
-│   │                         #   duplication, contribution — all deterministic
+│   │                         #   duplication, contribution: deterministic
 │   ├── codeeval/             # complexity, security, style, tests, structure,
 │   │                         #   detect (+ reviewer: the optional LLM pass)
 │   ├── claims/               # résumé + LinkedIn extraction, refine
@@ -215,7 +215,7 @@ npm run lint    # typecheck
 From the review screen, open **Add candidates and rank a cohort**, enter a GitHub
 username, and optionally attach a résumé or a LinkedIn export. Analysis runs as a
 background job because cloning a portfolio takes a minute or two; the form reports
-progress and says so up front. Once stored, tick the candidates and rank them — the
+progress and says so up front. Once stored, tick the candidates and rank them, and the
 whole loop stays in the browser. Uploaded documents are read once and deleted.
 
 The equivalent from a terminal:
@@ -244,12 +244,12 @@ veriquill fairness-report 1 --output fairness.json
 A rubric weights six fixed dimensions. Unlisted ones take their default weight; an
 unknown dimension name is refused rather than ignored. **A comparison cannot be
 exported until a named human approves it**, and an approval covers exactly the revision
-it saw — any later review action bumps the revision and reopens the gate.
+it saw, and any later review action bumps the revision and reopens the gate.
 
 Every candidate's confidence band is drawn on one shared axis in the dashboard, so
 where two bands overlap you can see that the evidence does not separate those
 candidates; tied candidates are bracketed together rather than listed in an order that
-would imply a difference. Colour marks who said what — the machine's numbers in ink,
+would imply a difference. Colour marks who said what: the machine's numbers in ink,
 every human dismissal or override beside them in blue.
 
 ## The API
@@ -281,8 +281,8 @@ relevant to the posting and names the rest as unread. Both numbers are configura
 (`VERIQUILL_RELEVANCE_THRESHOLD`, `VERIQUILL_RELEVANCE_LIMIT`), and a smaller account is
 always read in full.
 
-Relevance is decided from metadata GitHub already returned — language named in the
-posting, matching topics, matching description terms, size, recency, fork status — so
+Relevance is decided from metadata GitHub already returned (language named in the
+posting, matching topics, matching description terms, size, recency, fork status), so
 nothing is cloned in order to decide whether to clone it. Every selected repository
 records why it was chosen, and every skipped one is named.
 
@@ -330,7 +330,7 @@ veriquill fairness-report 1 --groups groups.json --top-k 3 --format markdown -o 
 Veriquill never infers a protected attribute, so selection-rate arithmetic needs group
 labels supplied from your own records (`{"alice": "A", "bob": "B"}`). Given them, it
 reports selection rate per group, the impact ratio against the four-fifths rule, and
-per-check flag rates — because an ordering can look even while the reasons behind it do
+per-check flag rates, because an ordering can look even while the reasons behind it do
 not. Without labels it still audits what needs no protected data at all: how evenly
 evidence could be gathered across the cohort. That is the most likely route to disparate
 impact in this design, since a portfolio in a language Veriquill does not analyse in
@@ -339,7 +339,7 @@ candidate.
 
 **The disclosure pack is generated from the running code**, not maintained by hand:
 measured dimensions come from the rubric and excluded attributes from the scanner itself,
-so neither can drift out of date. It is a self-audit artifact — jurisdictions such as New
+so neither can drift out of date. It is a self-audit artifact. Jurisdictions such as New
 York City require an independent bias audit, and nothing here replaces one.
 
 ## Deployment
@@ -377,7 +377,7 @@ use.
 
 **There is no authentication in front of any of this.** `--actor` is whatever the caller
 types, and every endpoint is open. Until that changes, run it somewhere only the hiring
-team can reach — a deployment that matters must supply an authenticated identity, because
+team can reach. A deployment that matters must supply an authenticated identity, because
 the audit log is only as trustworthy as the name written into it.
 
 What is in place is the floor beneath authentication, not a replacement for it. Request
@@ -395,7 +395,7 @@ off for a deployment that already has its own gateway.
 | `VERIQUILL_API_ANALYSIS_RATE_LIMIT` | 10/min | endpoints that start a clone, per client |
 | `VERIQUILL_MAX_JOB_DESCRIPTION_CHARS` | 20,000 | a posting handed to the rubric deriver |
 
-The budget is per process and keyed on the socket address, not on a forwarded header —
+The budget is per process and keyed on the socket address, not on a forwarded header,
 a header is caller-supplied and would let anyone spend anyone else's budget. Behind a
 trusted proxy that means the proxy, which is a real limitation and the reason this is a
 floor rather than a defence.
