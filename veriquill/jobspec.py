@@ -179,17 +179,81 @@ SIGNALS: dict[str, tuple[str, ...]] = {
 }
 
 
+# Cues that turn a phrase into its own absence. "We don't do heavy testing" and
+# "there is no formal QA process" both named a dimension and both used to raise
+# it, which read the posting as asking for exactly the thing it said it does not
+# do.
+NEGATION_CUES = (
+    "no",
+    "not",
+    "never",
+    "without",
+    "lacks",
+    "lack of",
+    "little",
+    "minimal",
+    "avoid",
+    "avoids",
+    "instead of",
+    "rather than",
+    "don't",
+    "dont",
+    "doesn't",
+    "doesnt",
+    "won't",
+    "wont",
+    "isn't",
+    "isnt",
+    "aren't",
+    "arent",
+)
+
+# How far back a cue is allowed to reach. Negation is scoped to the clause it
+# sits in, so the window starts at the nearest clause boundary and is capped
+# regardless - a cue eighty characters and three ideas ago is not negating this
+# phrase.
+_CLAUSE_BOUNDARY = re.compile(r"[.;:!?,\n]|\bbut\b|\bhowever\b|\balthough\b")
+NEGATION_WINDOW = 60
+
+
+def _is_negated(haystack: str, start: int) -> bool:
+    """Does a negation cue govern the phrase beginning at `start`?
+
+    The window runs back to the last clause boundary, capped at
+    `NEGATION_WINDOW` characters. "There is no formal QA process, but you will
+    write unit tests" keeps the tests, because the comma ends the clause the
+    cue belongs to.
+
+    This errs toward suppressing. A dimension wrongly left unraised falls back
+    to its default weight, which is what this module already does with a
+    description it cannot read; a dimension wrongly raised puts weight on the
+    posting's own disclaimer.
+    """
+    window_start = max(0, start - NEGATION_WINDOW)
+    window = haystack[window_start:start]
+
+    boundaries = list(_CLAUSE_BOUNDARY.finditer(window))
+    if boundaries:
+        window = window[boundaries[-1].end():]
+
+    return any(
+        re.search(rf"(?<!\w){re.escape(cue)}(?!\w)", window) for cue in NEGATION_CUES
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class JobSpec:
     """What a job description asked for, and the words it asked with."""
 
     text: str
     emphases: dict[str, list[str]] = field(default_factory=dict)
+    negated: dict[str, list[str]] = field(default_factory=dict)
     note: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "emphases": {k: list(v) for k, v in self.emphases.items()},
+            "negated": {k: list(v) for k, v in self.negated.items()},
             "note": self.note,
         }
 
@@ -231,11 +295,17 @@ def read_job_description(text: str) -> JobSpec:
     """Find the phrases that name a dimension, and record where each one came from."""
     haystack = (text or "").lower()
     emphases: dict[str, list[str]] = {}
+    negated: dict[str, list[str]] = {}
 
-    for _start, _end, dimension, phrase in sorted(_resolve_overlaps(_matches(haystack))):
-        phrases = emphases.setdefault(dimension, [])
+    for start, _end, dimension, phrase in sorted(_resolve_overlaps(_matches(haystack))):
+        bucket = negated if _is_negated(haystack, start) else emphases
+        phrases = bucket.setdefault(dimension, [])
         if phrase not in phrases:
             phrases.append(phrase)
+
+    # A dimension mentioned both ways keeps the mention that was not negated.
+    for dimension in emphases:
+        negated.pop(dimension, None)
 
     if emphases:
         named = ", ".join(sorted(emphases))
@@ -250,7 +320,15 @@ def read_job_description(text: str) -> JobSpec:
             "means something the wording does not say."
         )
 
-    return JobSpec(text=text, emphases=emphases, note=note)
+    if negated:
+        dismissed = ", ".join(sorted(negated))
+        note += (
+            f" {dismissed.capitalize()} was mentioned but read as negated - the "
+            "description says it does not apply - so it kept its default weight. "
+            "Check the wording if that reading is wrong."
+        )
+
+    return JobSpec(text=text, emphases=emphases, negated=negated, note=note)
 
 
 def derive_rubric(name: str, text: str) -> Rubric:

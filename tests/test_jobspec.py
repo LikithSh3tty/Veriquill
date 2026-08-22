@@ -176,3 +176,46 @@ def test_an_overlap_does_not_swallow_a_separate_mention():
 
     assert "test_quality" in spec.emphases
     assert "authenticity" in spec.emphases
+
+
+def test_a_negated_phrase_does_not_raise_its_dimension():
+    for posting in (
+        "We don't do heavy testing here.",
+        "There is no formal QA process.",
+        "We do not run penetration testing.",
+        "This role involves minimal test automation.",
+        "We ship without unit tests.",
+        "We never write integration tests.",
+    ):
+        spec = read_job_description(posting)
+        assert "test_quality" not in spec.emphases or "security" in spec.emphases, posting
+        assert "test_quality" not in spec.emphases, posting
+
+
+def test_a_negation_stops_at_the_clause_it_belongs_to():
+    spec = read_job_description(
+        "There is no formal QA process, but you will write unit tests yourself."
+    )
+
+    assert "test_quality" in spec.emphases
+    assert "unit tests" in spec.emphases["test_quality"]
+
+
+def test_a_negation_does_not_reach_across_a_sentence():
+    spec = read_job_description("We have no legacy code. You will write unit tests.")
+
+    assert "test_quality" in spec.emphases
+
+
+def test_a_negated_phrase_is_reported_rather_than_silently_dropped():
+    spec = read_job_description("We don't do heavy testing here.")
+
+    assert "test_quality" in spec.negated
+    assert spec.to_dict()["negated"]["test_quality"]
+    assert "negated" in spec.note.lower() or "read as negated" in spec.note.lower()
+
+
+def test_a_positive_description_reports_no_negations():
+    spec = read_job_description("You will write unit tests and practise TDD.")
+
+    assert spec.negated == {}
