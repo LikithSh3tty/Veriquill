@@ -34,13 +34,46 @@ SIGNALS: dict[str, tuple[str, ...]] = {
         "unit test",
         "unit tests",
         "integration test",
+        "integration tests",
+        "regression test",
+        "regression tests",
+        "smoke test",
+        "smoke tests",
+        "contract test",
+        "contract tests",
+        "end-to-end test",
+        "end-to-end tests",
+        "end to end test",
+        "end to end tests",
+        "e2e",
         "test-driven",
         "test driven",
         "tdd",
         "test coverage",
+        "code coverage",
+        "coverage threshold",
+        "coverage gate",
+        "test automation",
+        "automated test",
+        "automated tests",
+        "test suite",
+        "test suites",
         "testing",
         "tests",
         "qa",
+        "pytest",
+        "jest",
+        "vitest",
+        "junit",
+        "rspec",
+        "mocha",
+        "cypress",
+        "playwright",
+        "selenium",
+        "continuous integration",
+        "ci pipeline",
+        "ci/cd",
+        "property-based testing",
     ),
     "security": (
         "security",
@@ -52,7 +85,27 @@ SIGNALS: dict[str, tuple[str, ...]] = {
         "threat modelling",
         "threat modeling",
         "penetration testing",
+        "pen testing",
+        "pentest",
+        "pentesting",
         "appsec",
+        "sast",
+        "dast",
+        "cve",
+        "cves",
+        "dependency scanning",
+        "code scanning",
+        "supply chain security",
+        "secrets management",
+        "encryption",
+        "cryptography",
+        "hardening",
+        "least privilege",
+        "security review",
+        "security reviews",
+        "authentication",
+        "authorisation",
+        "authorization",
     ),
     # Every phrase here has to describe how work was *authored*. Bare "own",
     # "lead", and "led" did not: "we own our roadmap", "a leading fintech
@@ -84,10 +137,19 @@ SIGNALS: dict[str, tuple[str, ...]] = {
         "refactor",
         "refactoring",
         "readable",
+        "readability",
         "code quality",
+        "code review",
+        "code reviews",
         "architecture",
         "design patterns",
         "technical debt",
+        "separation of concerns",
+        "modularity",
+        "static analysis",
+        "linting",
+        "type safety",
+        "legacy code",
     ),
     "breadth": (
         "full stack",
@@ -96,6 +158,11 @@ SIGNALS: dict[str, tuple[str, ...]] = {
         "variety of projects",
         "range of technologies",
         "polyglot",
+        "wear many hats",
+        "across the stack",
+        "multiple languages",
+        "several languages",
+        "broad experience",
     ),
     "claim_corroboration": (
         "portfolio",
@@ -103,6 +170,11 @@ SIGNALS: dict[str, tuple[str, ...]] = {
         "verifiable",
         "demonstrated experience",
         "proven track record",
+        "open source contributions",
+        "public repositories",
+        "code samples",
+        "work samples",
+        "github profile",
     ),
 }
 
@@ -122,19 +194,48 @@ class JobSpec:
         }
 
 
+def _matches(haystack: str) -> list[tuple[int, int, str, str]]:
+    """Every phrase occurrence in the text, as (start, end, dimension, phrase)."""
+    found: list[tuple[int, int, str, str]] = []
+    for dimension, phrases in SIGNALS.items():
+        for phrase in phrases:
+            pattern = rf"(?<!\w){re.escape(phrase)}(?!\w)"
+            for match in re.finditer(pattern, haystack):
+                found.append((match.start(), match.end(), dimension, phrase))
+    return found
+
+
+def _resolve_overlaps(
+    matches: list[tuple[int, int, str, str]],
+) -> list[tuple[int, int, str, str]]:
+    """Where two phrases cover the same words, the longer one wins.
+
+    "end-to-end tests" is a sentence about testing. Read phrase by phrase it is
+    also the authenticity phrase "end-to-end", and both dimensions used to rise
+    off the same four words. Longest-match-first settles it the way a reader
+    would: the more specific phrase is the one the posting meant.
+
+    Ties break on dimension name so the result never depends on dict order.
+    """
+    kept: list[tuple[int, int, str, str]] = []
+    for start, end, dimension, phrase in sorted(
+        matches, key=lambda m: (-(m[1] - m[0]), m[0], m[2])
+    ):
+        if any(start < other_end and other_start < end for other_start, other_end, _, _ in kept):
+            continue
+        kept.append((start, end, dimension, phrase))
+    return kept
+
+
 def read_job_description(text: str) -> JobSpec:
     """Find the phrases that name a dimension, and record where each one came from."""
     haystack = (text or "").lower()
     emphases: dict[str, list[str]] = {}
 
-    for dimension, phrases in SIGNALS.items():
-        found = [
-            phrase
-            for phrase in phrases
-            if re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", haystack)
-        ]
-        if found:
-            emphases[dimension] = found
+    for _start, _end, dimension, phrase in sorted(_resolve_overlaps(_matches(haystack))):
+        phrases = emphases.setdefault(dimension, [])
+        if phrase not in phrases:
+            phrases.append(phrase)
 
     if emphases:
         named = ", ".join(sorted(emphases))

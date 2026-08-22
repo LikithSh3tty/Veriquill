@@ -134,3 +134,45 @@ def test_authorship_prose_still_raises_authenticity():
     ):
         spec = read_job_description(genuine)
         assert "authenticity" in spec.emphases, genuine
+
+
+def test_modern_testing_vocabulary_raises_the_test_dimension():
+    for posting in (
+        "You will write pytest suites for our services.",
+        "We use Jest and Playwright.",
+        "Every merge runs the CI pipeline.",
+        "We hold a code coverage threshold.",
+        "Strong test automation experience.",
+        "You will write regression tests.",
+    ):
+        spec = read_job_description(posting)
+        assert "test_quality" in spec.emphases, posting
+
+
+def test_modern_security_vocabulary_raises_the_security_dimension():
+    for posting in (
+        "You will run SAST across the monorepo.",
+        "Experience triaging CVEs.",
+        "We care about dependency scanning and supply chain security.",
+        "You will handle secrets management and encryption.",
+        "System hardening is part of the role.",
+    ):
+        spec = read_job_description(posting)
+        assert "security" in spec.emphases, posting
+
+
+def test_the_longer_phrase_wins_an_overlap():
+    """"end-to-end tests" is about testing. It must not also read as authorship."""
+    spec = read_job_description("You will write end-to-end tests for every release.")
+
+    assert "test_quality" in spec.emphases
+    assert "authenticity" not in spec.emphases
+
+
+def test_an_overlap_does_not_swallow_a_separate_mention():
+    spec = read_job_description(
+        "You will write end-to-end tests, and you own the service end to end."
+    )
+
+    assert "test_quality" in spec.emphases
+    assert "authenticity" in spec.emphases
