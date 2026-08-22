@@ -26,6 +26,7 @@ from veriquill.store import (
     create_comparison,
     get_comparison,
     list_rubrics,
+    rubric_from_record,
     save_dossier,
     save_rubric,
 )
@@ -435,7 +436,9 @@ def fairness_report(
             entry.candidate_handle: entry.dossier.payload for entry in comparison.entries
         }
         report = audit_comparison(result, groups=labels, top_k=top_k, dossiers=payloads)
-        pack = build_disclosure(audit=report)
+        # The rubric this comparison actually used, so the pack names any
+        # dimension it added rather than describing the defaults.
+        pack = build_disclosure(audit=report, rubric=rubric_from_record(comparison.rubric))
 
     text = render_markdown(pack) if output_format == "markdown" else json.dumps(pack, indent=2)
     if output is not None:

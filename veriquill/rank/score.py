@@ -49,7 +49,7 @@ def score_candidate(
     dossier: dict[str, Any], rubric: Rubric, dismissed: frozenset[str] = frozenset()
 ) -> CandidateScore:
     handle = str(dossier.get("handle") or "unknown")
-    dimensions = score_dimensions(dossier, dismissed)
+    dimensions = score_dimensions(dossier, dismissed, rubric)
 
     measured = [
         d for d in dimensions if d.measured and rubric.weights.get(d.dimension, 0.0) > 0

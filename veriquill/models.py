@@ -111,6 +111,10 @@ class RubricRecord(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     weights: Mapped[dict[str, float]] = mapped_column(JSON)
     minimum_bars: Mapped[dict[str, float]] = mapped_column(JSON)
+    # Dimensions this team added, each with the check ids it reads. Stored with
+    # the rubric rather than derived, because a comparison scored last week has
+    # to stay reproducible even if the definition changes afterwards.
+    custom_dimensions: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

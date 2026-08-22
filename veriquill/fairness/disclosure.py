@@ -18,7 +18,7 @@ from typing import Any
 
 from veriquill import __version__
 from veriquill.fairness.signals import CATEGORIES
-from veriquill.rubric import DEFAULT_WEIGHTS, DIMENSIONS
+from veriquill.rubric import DEFAULT_WEIGHTS, DIMENSIONS, Rubric
 
 # What each dimension actually reads. Keyed by dimension so a new dimension
 # without an entry is visible immediately rather than quietly undocumented.
@@ -79,8 +79,15 @@ DATA_HANDLING: tuple[str, ...] = (
 )
 
 
-def build_disclosure(audit: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Assemble the disclosure pack from the code that is actually running."""
+def build_disclosure(
+    audit: dict[str, Any] | None = None, rubric: Rubric | None = None
+) -> dict[str, Any]:
+    """Assemble the disclosure pack from the code that is actually running.
+
+    Pass the rubric a comparison used and the pack names the dimensions that
+    rubric added alongside the built-in six. Without it the pack describes the
+    defaults, which is what a general disclosure about the tool should say.
+    """
     notes: list[str] = [
         "This pack is generated from the installed code, not maintained by hand.",
         "It is a self-disclosure. Jurisdictions such as New York City require an "
@@ -102,6 +109,9 @@ def build_disclosure(audit: dict[str, Any] | None = None) -> dict[str, Any]:
             "iterative work and evaluates the code in it, then ranks candidates "
             "against a recruiter-supplied rubric for a human to review."
         ),
+        # Built-ins first, then whatever this rubric added. A disclosure that
+        # listed only the six would understate what actually moved the ranking,
+        # which is the one thing this document exists not to do.
         "what_is_measured": [
             {
                 "dimension": dimension,
@@ -109,6 +119,20 @@ def build_disclosure(audit: dict[str, Any] | None = None) -> dict[str, Any]:
                 "evidence": DIMENSION_EVIDENCE.get(dimension, ""),
             }
             for dimension in DIMENSIONS
+        ]
+        + [
+            {
+                "dimension": spec.name,
+                "default_weight": rubric.weights.get(spec.name, 0.0),
+                "evidence": (
+                    spec.description
+                    or f"added by this rubric; reads {', '.join(spec.checks)}"
+                ),
+            }
+            for spec in sorted(
+                (rubric.custom_dimensions if rubric else {}).values(),
+                key=lambda s: s.name,
+            )
         ],
         "what_is_excluded": [
             {

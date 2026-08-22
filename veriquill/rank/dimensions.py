@@ -13,7 +13,7 @@ from typing import Any
 
 from veriquill.findings import EvidenceRef
 from veriquill.rank.models import DimensionScore
-from veriquill.rubric import DIMENSIONS
+from veriquill.rubric import DIMENSIONS, CustomDimension, Rubric
 
 SEVERITY_PENALTY: dict[str, float] = {
     "critical": 1.0,
@@ -276,6 +276,39 @@ def score_breadth(dossier: dict[str, Any], dismissed: frozenset[str]) -> Dimensi
     )
 
 
+def score_custom(
+    spec: CustomDimension, dossier: dict[str, Any], dismissed: frozenset[str]
+) -> DimensionScore:
+    """Score a dimension a team defined, from the checks it named.
+
+    It reads flags exactly like the built-in six, so it cites files and lines
+    rather than asserting a number. A dimension whose checks never fired is
+    reported as unmeasured when nothing was analysed at all, and as clean when
+    repositories were read and simply raised none of them. Those are different
+    facts and the basis says which one happened.
+    """
+    counts = _coverage(dossier)
+    analysed = counts.get("repositories_analysed", 0)
+    considered = counts.get("repositories_considered", 0)
+    if analysed == 0:
+        return _unmeasured(
+            spec.name,
+            f"no repository could be analysed, so {spec.name} was not measured",
+        )
+
+    return _from_penalty(
+        spec.name,
+        dossier,
+        _live_flags(dossier, dismissed, spec.matches),
+        analysed,
+        min(1.0, analysed / max(1, considered)),
+        (
+            f"{_repos(analysed)} analysed; none raised "
+            f"{', '.join(spec.checks)}"
+        ),
+    )
+
+
 SCORERS: tuple[Callable[[dict[str, Any], frozenset[str]], DimensionScore], ...] = (
     score_authenticity,
     score_code_quality,
@@ -287,11 +320,23 @@ SCORERS: tuple[Callable[[dict[str, Any], frozenset[str]], DimensionScore], ...] 
 
 
 def score_dimensions(
-    dossier: dict[str, Any], dismissed: frozenset[str] = frozenset()
+    dossier: dict[str, Any],
+    dismissed: frozenset[str] = frozenset(),
+    rubric: Rubric | None = None,
 ) -> tuple[DimensionScore, ...]:
-    """Score every dimension once, returned in the rubric's canonical order."""
+    """Score every dimension once, returned in the rubric's canonical order.
+
+    Without a rubric only the built-in six are scored, which is what callers
+    that just want the standard picture get.
+    """
     scored: dict[str, DimensionScore] = {}
     for scorer in SCORERS:
         result = scorer(dossier, dismissed)
         scored[result.dimension] = result
-    return tuple(scored[dimension] for dimension in DIMENSIONS)
+
+    if rubric is None:
+        return tuple(scored[dimension] for dimension in DIMENSIONS)
+
+    for spec in rubric.custom_dimensions.values():
+        scored[spec.name] = score_custom(spec, dossier, dismissed)
+    return tuple(scored[dimension] for dimension in rubric.dimensions)

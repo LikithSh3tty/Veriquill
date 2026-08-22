@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-501%20Python%20%2B%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-562%20Python%20%2B%20Vitest-brightgreen)
 
 </div>
 
@@ -52,7 +52,7 @@ imported once.
 - **Reconciles documents against evidence.** Résumé and LinkedIn claims are extracted,
   matched to repositories, and marked corroborated, uncorroborated, or contradicted,
   with the evidence attached either way.
-- **Ranks a cohort against a rubric** you weight over six fixed dimensions:
+- **Ranks a cohort against a rubric** you weight over six built-in dimensions:
   authenticity, code quality, claim corroboration, test quality, security, breadth,
   reading only stored dossiers, with no network call and no LLM.
 - **Blocks export behind a human gate.** Dismissals and band overrides never edit the
@@ -290,10 +290,41 @@ veriquill audit 1
 veriquill fairness-report 1 --output fairness.json
 ```
 
-A rubric weights six fixed dimensions. Unlisted ones take their default weight; an
+A rubric weights six built-in dimensions. Unlisted ones take their default weight; an
 unknown dimension name is refused rather than ignored. **A comparison cannot be
 exported until a named human approves it**, and an approval covers exactly the revision
 it saw, and any later review action bumps the revision and reopens the gate.
+
+### Adding a dimension
+
+A team that weighs something the six do not can add a dimension, but only by naming
+the checks it scores from:
+
+```json
+{
+  "name": "backend-hire",
+  "weights": { "authenticity": 0.3, "api_hygiene": 0.2 },
+  "custom_dimensions": {
+    "api_hygiene": {
+      "checks": ["codeeval.security."],
+      "description": "how carefully the service handles untrusted input"
+    }
+  }
+}
+```
+
+That condition is the design, not a formality. Every built-in dimension is backed by
+checks that emit evidence, and a dimension nobody can evidence is an opinion with a
+number attached. A custom dimension is scored exactly the way the six are: it reads
+flags, cites the files and lines behind them, and reports as unmeasured when nothing
+could be analysed rather than quietly scoring zero. Check ids match as prefixes, so
+`codeeval.security.` covers every security check, including ones added later.
+
+A custom dimension with no weight is refused rather than given a default, because
+inventing one would move a ranking on a number nobody chose. It can carry a minimum
+bar like any other dimension, and the disclosure pack names it alongside the six: a
+document whose purpose is to say what moved a ranking must not omit the part this
+team added.
 
 Every candidate's confidence band is drawn on one shared axis in the dashboard, so
 where two bands overlap you can see that the evidence does not separate those

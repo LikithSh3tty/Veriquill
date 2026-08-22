@@ -27,7 +27,7 @@ from veriquill.models import (
     RubricRecord,
 )
 from veriquill.rank.score import score_candidate
-from veriquill.rubric import Rubric
+from veriquill.rubric import CustomDimension, Rubric
 
 
 class StoreError(ValueError):
@@ -49,6 +49,9 @@ def save_rubric(session: Session, rubric: Rubric) -> RubricRecord:
         version=rubric.version,
         weights=dict(rubric.weights),
         minimum_bars=dict(rubric.minimum_bars),
+        custom_dimensions={
+            name: spec.to_dict() for name, spec in rubric.custom_dimensions.items()
+        },
         created_at=_now(),
     )
     session.add(record)
@@ -65,14 +68,34 @@ def _latest_rubric_record(session: Session, name: str) -> RubricRecord:
     return record
 
 
-def load_rubric(session: Session, name: str) -> Rubric:
-    record = _latest_rubric_record(session, name)
+def rubric_from_record(record: RubricRecord) -> Rubric:
+    """Rebuild the rubric exactly as this row stored it.
+
+    Comparisons hold the row they scored with, not the rubric's name, because
+    rubrics are versioned rather than edited and a comparison scored last week
+    has to stay reproducible after a reweight.
+    """
+    # A rubric stored before custom dimensions existed has NULL here, and one
+    # that never defined any has {}. Both mean the same thing.
+    stored = record.custom_dimensions or {}
     return Rubric(
         name=record.name,
         version=record.version,
         weights=dict(record.weights),
         minimum_bars=dict(record.minimum_bars),
+        custom_dimensions={
+            name: CustomDimension(
+                name=name,
+                checks=tuple(spec.get("checks") or ()),
+                description=str(spec.get("description") or ""),
+            )
+            for name, spec in stored.items()
+        },
     )
+
+
+def load_rubric(session: Session, name: str) -> Rubric:
+    return rubric_from_record(_latest_rubric_record(session, name))
 
 
 def list_rubrics(session: Session) -> list[Rubric]:
