@@ -219,3 +219,31 @@ def test_a_positive_description_reports_no_negations():
     spec = read_job_description("You will write unit tests and practise TDD.")
 
     assert spec.negated == {}
+
+
+def test_second_person_ownership_still_raises_authenticity():
+    """Trimming bare "own" and "lead" must not cost the phrasing that meant it.
+
+    "We own our roadmap" is boilerplate about the company. "You will own the
+    payments service" is a statement about who writes the code, which is the
+    thing authenticity measures.
+    """
+    for genuine in (
+        "You will own the payments service.",
+        "You'll own this from design through to production.",
+        "You will lead the rewrite.",
+        "We expect you to own and operate what you build.",
+    ):
+        spec = read_job_description(genuine)
+        assert "authenticity" in spec.emphases, genuine
+
+
+def test_first_person_company_boilerplate_still_does_not():
+    for boilerplate in (
+        "We own our roadmap and we move fast.",
+        "We own the problem, not the solution.",
+        "Join a leading fintech company.",
+        "Our team owns its own priorities.",
+    ):
+        spec = read_job_description(boilerplate)
+        assert "authenticity" not in spec.emphases, boilerplate

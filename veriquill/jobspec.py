@@ -113,7 +113,17 @@ SIGNALS: dict[str, tuple[str, ...]] = {
     # appears in most postings, and they were raising authenticity for nearly
     # every job. A phrase that fires on filler is worse than no phrase at all,
     # because the weight it moves cannot be defended to the candidate.
+    # Second person is what separates the two. "We own our roadmap" is the
+    # company describing itself; "you will own the payments service" is a
+    # statement about who writes the code, which is the thing authenticity
+    # measures. Addressing the candidate is the signal, not the verb.
     "authenticity": (
+        "you will own",
+        "you'll own",
+        "you will lead",
+        "you'll lead",
+        "you will build",
+        "own and operate",
         "ownership",
         "take ownership",
         "end to end",

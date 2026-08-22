@@ -141,3 +141,87 @@ def test_the_job_a_store_returns_hides_no_filesystem_paths(store):
         "created_at",
         "finished_at",
     }
+
+
+def test_a_second_process_reads_the_truth_rather_than_its_own_stale_copy(factory):
+    """The correctness boundary of the read cache.
+
+    A store only caches jobs it wrote itself, because only the writer can know
+    the entry is current. A store that did not write the job must go to SQLite
+    every time, or it would serve a status that moved on without it.
+    """
+    writer = SqlJobStore(factory)
+    reader = SqlJobStore(factory)
+
+    job = writer.create("octocat")
+
+    # The reader has never written this job, so it must not be holding one.
+    assert reader.get(job.id).status == "queued"
+
+    writer.start(job.id)
+    writer.finish(job.id, dossier_id=3)
+
+    assert reader.get(job.id).status == "done"
+    assert reader.get(job.id).dossier_id == 3
+
+
+def test_reading_a_job_never_populates_the_cache(factory):
+    """Caching on read is exactly the bug the write-through rule avoids."""
+    reader = SqlJobStore(factory)
+    job = SqlJobStore(factory).create("octocat")
+
+    reader.get(job.id)
+
+    assert job.id not in reader._own
+
+
+def test_the_writer_sees_its_own_updates_immediately(factory):
+    store = SqlJobStore(factory)
+    job = store.create("octocat")
+
+    store.start(job.id)
+    assert store.get(job.id).status == "running"
+
+    store.fail(job.id, "clone timed out")
+    assert store.get(job.id).status == "failed"
+    assert store.get(job.id).error == "clone timed out"
+
+
+def test_abandoning_drops_cached_copies_rather_than_serving_them(factory):
+    """A cached "running" would outlive the row that says it was abandoned."""
+    store = SqlJobStore(factory)
+    job = store.create("octocat")
+    store.start(job.id)
+
+    store.abandon_unfinished("the server restarted mid-analysis")
+
+    assert store.get(job.id).status == "failed"
+    assert "restarted" in (store.get(job.id).error or "")
+
+
+def test_the_cache_is_bounded_and_evicting_costs_only_a_disk_read(factory):
+    """The cache is an optimisation correctness never depends on."""
+    store = SqlJobStore(factory)
+    store.CACHE_LIMIT = 4
+
+    jobs = [store.create(f"cand{i}") for i in range(10)]
+
+    assert len(store._own) == 4
+    # Evicted jobs are still readable; they just come from SQLite now.
+    assert store.get(jobs[0].id).handle == "cand0"
+    assert store.get(jobs[-1].id).handle == "cand9"
+
+
+def test_an_evicted_job_still_reports_its_updates(factory):
+    store = SqlJobStore(factory)
+    store.CACHE_LIMIT = 2
+
+    job = store.create("alice")
+    for i in range(5):
+        store.create(f"filler{i}")
+
+    assert job.id not in store._own
+    store.finish(job.id, dossier_id=11)
+
+    assert store.get(job.id).status == "done"
+    assert store.get(job.id).dossier_id == 11

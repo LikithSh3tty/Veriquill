@@ -222,10 +222,37 @@ class SqlJobStore:
 
     Jobs are working state, not evidence. What a decision rests on is the
     dossier, which is written by the job and stored separately.
+
+    Reads of a job this process wrote are served from memory, which is what
+    makes the durability free at the point the interface actually pays for it:
+    the browser polls one job id every 1.5 seconds, and that poll should not be
+    a disk read.
+
+    The cache is write-through and never populated by a read. That distinction
+    is the whole correctness argument. A job is only ever written by the process
+    that accepted it - the background task runs there - so that process's copy
+    cannot go stale. Any other process has no entry, falls through to SQLite,
+    and gets the truth. Caching on read is what would break this, by letting a
+    process that is not the writer hold an answer it has no way to refresh.
+
+    It is bounded, and eviction costs nothing but a disk read, because a miss
+    falls through to the same query a cold process would run. That is the other
+    half of the design: the cache is an optimisation the correctness never
+    depends on, so it can be dropped, capped, or emptied at any point.
     """
+
+    #: Jobs kept in memory. A recruiter works through a cohort, not a backlog of
+    #: thousands, so this is far more than the polling ever reaches back to.
+    CACHE_LIMIT = 256
 
     def __init__(self, session_factory: Callable[[], AbstractContextManager[Session]]) -> None:
         self._session_factory = session_factory
+        self._own: dict[str, Job] = {}
+
+    def _remember(self, job: Job) -> None:
+        self._own[job.id] = job
+        while len(self._own) > self.CACHE_LIMIT:
+            self._own.pop(next(iter(self._own)))
 
     def create(self, handle: str) -> Job:
         handle = validate_handle(handle)
@@ -239,13 +266,20 @@ class SqlJobStore:
                     created_at=job.created_at,
                 )
             )
+        self._remember(job)
         return job
 
     def get(self, job_id: str) -> Job:
+        own = self._own.get(job_id)
+        if own is not None:
+            return own
+
         with self._session_factory() as session:
             record = session.get(IntakeJobRecord, job_id)
             if record is None:
                 raise IntakeError(f"no intake job {job_id!r}")
+            # Deliberately not cached. See the class docstring: an entry this
+            # process did not write is one it has no way to know has changed.
             return _to_job(record)
 
     def list(self) -> list[Job]:
@@ -263,7 +297,12 @@ class SqlJobStore:
             for attribute, value in changes.items():
                 setattr(record, attribute, value)
             session.flush()
-            return _to_job(record)
+            job = _to_job(record)
+
+        # Write-through: this process just became the authority on this job.
+        if job_id in self._own:
+            self._remember(job)
+        return job
 
     def start(self, job_id: str) -> Job:
         return self._update(job_id, status="running")
@@ -296,4 +335,10 @@ class SqlJobStore:
                 record.status = "failed"
                 record.error = reason
                 record.finished_at = _now()
+
+            # This writes rows the cache may be holding older copies of, so the
+            # cache is dropped rather than patched. It is startup: there is
+            # nothing in it worth keeping, and a wrong entry here would report
+            # an abandoned job as still running.
+            self._own.clear()
             return len(stale)
