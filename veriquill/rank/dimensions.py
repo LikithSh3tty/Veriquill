@@ -161,8 +161,9 @@ def _codeeval_dimension(
     if deep == 0:
         return _unmeasured(
             dimension,
-            "no repository was analysed in depth; only Python is analysed in depth, and "
-            "no quality judgment is made about other languages in either direction",
+            "no repository was analysed in depth; Python, TypeScript and JavaScript are "
+            "analysed in depth, and no quality judgment is made about other languages "
+            "in either direction",
         )
     return _from_penalty(
         dimension,

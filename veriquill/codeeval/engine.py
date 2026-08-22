@@ -15,6 +15,11 @@ from veriquill.codeeval.security import check_security
 from veriquill.codeeval.structure import check_structure
 from veriquill.codeeval.style import check_style
 from veriquill.codeeval.tests import check_tests
+from veriquill.codeeval.typescript import (
+    check_typescript_complexity,
+    check_typescript_security,
+    check_typescript_tests,
+)
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
@@ -27,6 +32,9 @@ _ANALYSERS = (
     check_style,
     check_tests,
     check_structure,
+    check_typescript_complexity,
+    check_typescript_security,
+    check_typescript_tests,
 )
 
 
@@ -39,9 +47,9 @@ def coverage_note(profile: LanguageProfile, repo_name: str = "") -> Finding | No
         severity=Severity.INFO,
         title="Some languages were not deeply analysed",
         rationale=(
-            "Milestone M1 analyses Python in depth. These languages were detected "
-            f"and counted only: {', '.join(shallow)}. No quality judgment is made "
-            "about them, in either direction."
+            f"Analysed in depth: {', '.join(sorted(DEEPLY_ANALYSED))}. These "
+            f"languages were detected and counted only: {', '.join(shallow)}. No "
+            "quality judgment is made about them, in either direction."
         ),
         confidence=1.0,
         evidence=(

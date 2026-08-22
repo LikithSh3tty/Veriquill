@@ -12,6 +12,7 @@ import hashlib
 import json
 from typing import Any
 
+from veriquill.codeeval.detect import DEEPLY_ANALYSED
 from veriquill.findings import Severity
 from veriquill.reconcile.models import Reconciliation, Verdict
 
@@ -171,8 +172,12 @@ def _analysis_coverage(
         "repositories_with_authored_code": sum(
             1 for r in with_evidence if r.evidence.authored_loc > 0
         ),
+        # Any language an analyser actually inspects counts here. Restricting it
+        # to Python meant a TypeScript portfolio measured as unreadable and
+        # carried a wide confidence band for it, which the fairness audit named
+        # as the most likely route to disparate impact in this design.
         "repositories_deep_analysed": sum(
-            1 for r in with_evidence if "Python" in r.evidence.languages
+            1 for r in with_evidence if DEEPLY_ANALYSED.intersection(r.evidence.languages)
         ),
         "claims_total": sum(1 for r in reconciliations if r.claim is not None),
         "claims_resolved": sum(

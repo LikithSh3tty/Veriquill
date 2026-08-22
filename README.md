@@ -46,8 +46,9 @@ imported once.
   the commits they are being credited for.
 - **Evaluates code by static analysis.** Cyclomatic complexity, security hygiene,
   lint compliance, dead modules nothing imports, and test quality measured by
-  assertion meaningfulness rather than test count. Python is analysed in depth;
-  other languages are detected, counted, and the output says so explicitly.
+  assertion meaningfulness rather than test count. Python, TypeScript and
+  JavaScript are analysed in depth; other languages are detected, counted, and the
+  output says so explicitly.
 - **Reconciles documents against evidence.** Résumé and LinkedIn claims are extracted,
   matched to repositories, and marked corroborated, uncorroborated, or contradicted,
   with the evidence attached either way.
@@ -115,6 +116,31 @@ rather than a convention: a `Finding` with empty evidence cannot be constructed.
                  ▼
           export + audit log + fairness report
 ```
+
+### Languages
+
+Python is analysed with a real syntax tree, through radon, bandit and ruff.
+TypeScript and JavaScript are analysed by reading the source as text: complexity
+counted from decision keywords, test quality from whether assertions can fail, and
+a short list of security-hygiene patterns.
+
+**Nothing in that path executes anything from the repository.** The obvious way to
+get this depth is `tsc` and `eslint`, and both run code the candidate wrote: config
+files are JavaScript, plugins are arbitrary packages, and `npm install` runs
+lifecycle scripts. Veriquill clones repositories it has every reason to treat as
+untrusted, so it reads rather than runs.
+
+That buys real evidence where there was none before, and it costs precision. A
+lexical count tracks the cyclomatic number closely on ordinary code and can drift
+on heavily generic or deeply nested expressions, and nothing there can see what
+only a type checker would. So those findings carry lower confidence than their
+Python counterparts and say in their own text that they are approximations. A
+weaker measurement must not be presented as though it were the stronger one.
+
+This was the largest fairness problem in the tool. A TypeScript portfolio used to
+yield no code-quality evidence at all, which the ranker correctly reported as "we
+could not tell" and correctly refused to score as weak, and which still left the
+candidate carrying a wide confidence band through no fault of their own.
 
 **Design review is the one optional model call**, off by default. Set
 `VERIQUILL_CODE_REVIEW_ENABLED=true` and Claude phrases the judgment static analysis
