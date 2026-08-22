@@ -148,8 +148,8 @@ def test_the_default_limit_is_a_handful_not_everything():
 
 def test_the_english_word_go_does_not_name_the_go_language():
     """'go-getter' and 'go far' are prose, not a language requirement."""
-    assert _languages_named("We want a go-getter who will go far.") == set()
-    assert _languages_named("Go the extra mile for our customers.") == set()
+    assert set(_languages_named("We want a go-getter who will go far.")) == set()
+    assert set(_languages_named("Go the extra mile for our customers.")) == set()
 
 
 def test_go_named_as_a_language_still_counts():
@@ -164,7 +164,7 @@ def test_go_named_as_a_language_still_counts():
 
 
 def test_swift_as_an_adjective_does_not_name_the_swift_language():
-    assert _languages_named("We pride ourselves on swift delivery.") == set()
+    assert set(_languages_named("We pride ourselves on swift delivery.")) == set()
     assert "Swift" in _languages_named("You will build our iOS app in Swift.")
 
 
@@ -179,3 +179,49 @@ def test_an_ambiguous_language_only_wins_places_when_the_posting_names_it():
 
     named, _ = select_repositories(repos, "Backend engineer writing Go.", limit=1, threshold=10)
     assert named[0]["repository"]["name"] == "tool"
+
+
+def test_a_framework_implies_the_language_it_is_written_in():
+    """A posting says "Django and React". It never says "Python" or "TypeScript"."""
+    assert "Python" in _languages_named("You will work on our Django monolith.")
+    assert "TypeScript" in _languages_named("Frontend built with React and Next.js.")
+    assert "JavaScript" in _languages_named("Frontend built with React and Next.js.")
+    assert "Ruby" in _languages_named("Our app is Rails.")
+    assert "Java" in _languages_named("Spring Boot microservices.")
+    assert "C#" in _languages_named("An ASP.NET Core service.")
+    assert "PHP" in _languages_named("A Laravel codebase.")
+    assert "Swift" in _languages_named("You will ship our SwiftUI app.")
+
+
+def test_a_framework_posting_selects_the_right_repositories():
+    repos = [repo(f"js{i}", "JavaScript", size=900) for i in range(20)] + [
+        repo("api", "Python", size=1, pushed_at="2019-01-01T00:00:00Z")
+    ]
+
+    selected, _ = select_repositories(
+        repos, "Backend engineer for our Django services.", limit=1, threshold=10
+    )
+
+    assert selected[0]["repository"]["name"] == "api"
+
+
+def test_an_implied_language_says_which_word_implied_it():
+    repos = [repo(f"r{i}") for i in range(20)] + [repo("api", "Python")]
+
+    selected, _ = select_repositories(repos, "Django and Celery.", limit=2, threshold=10)
+
+    reasons = " ".join(
+        r for row in selected for r in row["reasons"] if row["repository"]["name"] == "api"
+    )
+    assert "django" in reasons.lower()
+
+
+def test_a_language_named_outright_still_reads_as_named_not_implied():
+    repos = [repo(f"r{i}") for i in range(20)] + [repo("api", "Python")]
+
+    selected, _ = select_repositories(repos, "Python services.", limit=2, threshold=10)
+
+    reasons = " ".join(
+        r for row in selected for r in row["reasons"] if row["repository"]["name"] == "api"
+    )
+    assert "names" in reasons.lower()

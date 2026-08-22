@@ -43,6 +43,74 @@ LANGUAGE_TERMS = {
     "scala": "Scala",
 }
 
+# Frameworks, and the languages they are written in.
+#
+# A posting almost never names a language. It says "Django and React", or "our
+# Rails monolith", and leaves the language implicit because everyone in the room
+# already knows it. Without this table `_languages_named` returned nothing for
+# those postings, the strongest pre-clone signal went dead, and selection fell
+# back entirely to size and recency - which is to say, to a proxy.
+#
+# Terms that are also ordinary English are deliberately absent. "Spring" is a
+# season and appears in start dates, "express" and "maven" are words, "gin" and
+# "echo" are common nouns. Where a framework has an unambiguous long form it is
+# used instead, and where it does not the framework is simply left out: missing
+# a signal costs recall, inventing one costs a candidate their place.
+FRAMEWORK_LANGUAGES: dict[str, tuple[str, ...]] = {
+    "django": ("Python",),
+    "flask": ("Python",),
+    "fastapi": ("Python",),
+    "celery": ("Python",),
+    "airflow": ("Python",),
+    "pytest": ("Python",),
+    "sqlalchemy": ("Python",),
+    "pandas": ("Python",),
+    "numpy": ("Python",),
+    "pytorch": ("Python",),
+    "tensorflow": ("Python",),
+    "scikit-learn": ("Python",),
+    "react": ("TypeScript", "JavaScript"),
+    "react.js": ("TypeScript", "JavaScript"),
+    "next.js": ("TypeScript", "JavaScript"),
+    "nextjs": ("TypeScript", "JavaScript"),
+    "angular": ("TypeScript", "JavaScript"),
+    "vue": ("TypeScript", "JavaScript"),
+    "vue.js": ("TypeScript", "JavaScript"),
+    "svelte": ("TypeScript", "JavaScript"),
+    "node.js": ("TypeScript", "JavaScript"),
+    "nodejs": ("TypeScript", "JavaScript"),
+    "express.js": ("TypeScript", "JavaScript"),
+    "expressjs": ("TypeScript", "JavaScript"),
+    "nestjs": ("TypeScript", "JavaScript"),
+    "deno": ("TypeScript", "JavaScript"),
+    "rails": ("Ruby",),
+    "ruby on rails": ("Ruby",),
+    "sinatra": ("Ruby",),
+    "spring boot": ("Java",),
+    "springframework": ("Java",),
+    "hibernate": ("Java",),
+    "gradle": ("Java", "Kotlin"),
+    "android": ("Kotlin", "Java"),
+    "ktor": ("Kotlin",),
+    "jetpack compose": ("Kotlin",),
+    "swiftui": ("Swift",),
+    "uikit": ("Swift",),
+    "ios": ("Swift",),
+    "laravel": ("PHP",),
+    "symfony": ("PHP",),
+    "wordpress": ("PHP",),
+    "asp.net": ("C#",),
+    "dotnet": ("C#",),
+    ".net": ("C#",),
+    "goroutine": ("Go",),
+    "goroutines": ("Go",),
+    "gofiber": ("Go",),
+    "tokio": ("Rust",),
+    "actix": ("Rust",),
+    "axum": ("Rust",),
+    "akka": ("Scala",),
+}
+
 # Weightings. A language match is the strongest pre-clone signal a posting gives.
 LANGUAGE_MATCH = 6.0
 TOPIC_MATCH = 3.0
@@ -163,23 +231,47 @@ def _named_as_a_language(term: str, haystack: str) -> bool:
     return any(re.search(pattern, haystack) for pattern in patterns)
 
 
-def _languages_named(text: str) -> set[str]:
+def _languages_named(text: str) -> dict[str, str]:
+    """Map each language the posting asks for to the word that asked for it.
+
+    A language named outright maps to its own name. A language reached through
+    a framework maps to the framework, so the selection reason can say "implies"
+    rather than "names" and a candidate can see exactly which word moved them.
+    """
     haystack = (text or "").lower()
-    return {
-        language
-        for term, language in LANGUAGE_TERMS.items()
-        if _named_as_a_language(term, haystack)
-    }
+    named: dict[str, str] = {}
+
+    for term, languages in FRAMEWORK_LANGUAGES.items():
+        if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", haystack):
+            for language in languages:
+                named.setdefault(language, term)
+
+    # An outright mention outranks an implication, so this runs second and
+    # overwrites: "Django, and some TypeScript" should read as naming
+    # TypeScript, not as implying it.
+    for term, language in LANGUAGE_TERMS.items():
+        if _named_as_a_language(term, haystack):
+            named[language] = language.lower()
+
+    return named
 
 
-def _score(repo: dict[str, Any], terms: set[str], languages: set[str]) -> tuple[float, list[str]]:
+def _score(
+    repo: dict[str, Any], terms: set[str], languages: dict[str, str]
+) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
 
     language = repo.get("language")
     if language and language in languages:
         score += LANGUAGE_MATCH
-        reasons.append(f"written in {language}, which the posting names")
+        source = languages[language]
+        if source == language.lower():
+            reasons.append(f"written in {language}, which the posting names")
+        else:
+            reasons.append(
+                f"written in {language}, which the posting implies by naming {source}"
+            )
 
     topics = {str(t).lower() for t in repo.get("topics") or []}
     shared_topics = sorted(topics & terms)
