@@ -54,18 +54,28 @@ SIGNALS: dict[str, tuple[str, ...]] = {
         "penetration testing",
         "appsec",
     ),
+    # Every phrase here has to describe how work was *authored*. Bare "own",
+    # "lead", and "led" did not: "we own our roadmap", "a leading fintech
+    # company", and "your team lead will mentor you" are boilerplate that
+    # appears in most postings, and they were raising authenticity for nearly
+    # every job. A phrase that fires on filler is worse than no phrase at all,
+    # because the weight it moves cannot be defended to the candidate.
     "authenticity": (
-        "own",
-        "owns",
         "ownership",
+        "take ownership",
         "end to end",
         "end-to-end",
         "from scratch",
+        "from the ground up",
+        "greenfield",
         "sole author",
+        "sole developer",
+        "sole engineer",
+        "sole maintainer",
         "independently",
-        "self-starter",
-        "lead",
-        "led",
+        "led the",
+        "ship it yourself",
+        "build it yourself",
     ),
     "code_quality": (
         "clean code",

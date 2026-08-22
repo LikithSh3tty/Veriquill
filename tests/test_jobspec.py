@@ -109,3 +109,28 @@ def test_the_same_description_always_derives_the_same_rubric():
     text = "We need tests, security, and clean code."
 
     assert derive_rubric("r", text).weights == derive_rubric("r", text).weights
+
+
+def test_boilerplate_ownership_prose_does_not_raise_authenticity():
+    """Almost every posting says these. None of them describe how work was authored."""
+    for boilerplate in (
+        "We own our roadmap and we move fast.",
+        "Join a leading fintech company.",
+        "Your team lead will mentor you through onboarding.",
+        "This role led to two promotions last year.",
+        "We own the problem, not the solution.",
+    ):
+        spec = read_job_description(boilerplate)
+        assert "authenticity" not in spec.emphases, boilerplate
+
+
+def test_authorship_prose_still_raises_authenticity():
+    for genuine in (
+        "You will be the sole author of the billing service.",
+        "Greenfield work: you build this from scratch.",
+        "You will own services end to end.",
+        "We expect you to work independently.",
+        "You led the migration yourself.",
+    ):
+        spec = read_job_description(genuine)
+        assert "authenticity" in spec.emphases, genuine

@@ -70,12 +70,105 @@ def _terms(text: str) -> set[str]:
     }
 
 
+# Language names that are also ordinary English words. "We want a go-getter",
+# "go the extra mile", and "swift delivery" all matched a bare word-boundary
+# search, and a language match is the strongest pre-clone signal there is — a
+# posting about prose was handing six points to every Go repository on the
+# account. These terms only count inside a context that reads like a stack.
+AMBIGUOUS_LANGUAGE_TERMS = frozenset({"go", "swift", "rust"})
+
+# Tokens that, immediately before the term, mark it as a technology.
+_LANGUAGE_LEAD_IN = (
+    "in",
+    "with",
+    "using",
+    "of",
+    "and",
+    "or",
+    "both",
+    "is",
+    "are",
+    "write",
+    "writes",
+    "writing",
+    "written",
+    "build",
+    "builds",
+    "building",
+    "built",
+    "ship",
+    "ships",
+    "shipping",
+    "use",
+    "uses",
+    "know",
+    "knows",
+    "learn",
+    "learning",
+    "adopt",
+    "adopting",
+    "migrating",
+)
+# Words that, immediately after the term, mark it as a technology.
+_LANGUAGE_FOLLOW_ON = (
+    "developer",
+    "developers",
+    "engineer",
+    "engineers",
+    "programmer",
+    "programmers",
+    "programming",
+    "code",
+    "codebase",
+    "service",
+    "services",
+    "microservices",
+    "backend",
+    "back-end",
+    "experience",
+    "expertise",
+    "stack",
+    "ecosystem",
+    "api",
+    "apis",
+    "module",
+    "modules",
+)
+
+
+def _named_as_a_language(term: str, haystack: str) -> bool:
+    """Does this term appear as a technology rather than as ordinary prose?
+
+    Unambiguous terms need no context. Ambiguous ones must be led into by a
+    preposition or a list conjunction, followed by a word that only ever
+    follows a technology, or sit next to list punctuation.
+
+    This is a heuristic and it stays one: "come and go" still reads as the
+    language. That residual costs at most one repository slot, it is recorded
+    in the selection reasons like every other choice, and it never touches a
+    score — which is the trade this whole module makes.
+    """
+    boundary = rf"(?<!\w){re.escape(term)}(?!\w)"
+    if term not in AMBIGUOUS_LANGUAGE_TERMS:
+        return re.search(boundary, haystack) is not None
+
+    lead_in = "|".join(_LANGUAGE_LEAD_IN)
+    follow_on = "|".join(_LANGUAGE_FOLLOW_ON)
+    patterns = (
+        rf"(?:(?<=\s)|^)(?:{lead_in})\s+{boundary}",   # "written in Go"
+        rf"{boundary}\s+(?:{follow_on})(?!\w)",        # "Go services"
+        rf"{boundary}\s*[,/)]",                        # "Go, Postgres and Kafka"
+        rf"[(/]\s*{boundary}",                          # "Python/Go"
+    )
+    return any(re.search(pattern, haystack) for pattern in patterns)
+
+
 def _languages_named(text: str) -> set[str]:
     haystack = (text or "").lower()
     return {
         language
         for term, language in LANGUAGE_TERMS.items()
-        if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", haystack)
+        if _named_as_a_language(term, haystack)
     }
 
 

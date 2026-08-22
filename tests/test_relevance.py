@@ -9,7 +9,7 @@ pretends the unread ones were read.
 
 from __future__ import annotations
 
-from veriquill.relevance import DEFAULT_LIMIT, select_repositories
+from veriquill.relevance import DEFAULT_LIMIT, _languages_named, select_repositories
 
 
 def repo(name: str, language: str | None = None, **kwargs) -> dict:
@@ -144,3 +144,38 @@ def test_without_a_posting_the_biggest_and_newest_win():
 
 def test_the_default_limit_is_a_handful_not_everything():
     assert 1 <= DEFAULT_LIMIT <= 10
+
+
+def test_the_english_word_go_does_not_name_the_go_language():
+    """'go-getter' and 'go far' are prose, not a language requirement."""
+    assert _languages_named("We want a go-getter who will go far.") == set()
+    assert _languages_named("Go the extra mile for our customers.") == set()
+
+
+def test_go_named_as_a_language_still_counts():
+    for posting in (
+        "Backend engineer writing Go services.",
+        "Experience in Go is required.",
+        "We are hiring a Golang developer.",
+        "Our stack is Go, Postgres and Kafka.",
+        "You will write code in Go and Python.",
+    ):
+        assert "Go" in _languages_named(posting), posting
+
+
+def test_swift_as_an_adjective_does_not_name_the_swift_language():
+    assert _languages_named("We pride ourselves on swift delivery.") == set()
+    assert "Swift" in _languages_named("You will build our iOS app in Swift.")
+
+
+def test_an_ambiguous_language_only_wins_places_when_the_posting_names_it():
+    """A tiny stale Go repo must not outrank a large recent one on prose alone."""
+    repos = [repo("flagship", "Ruby", size=9000, pushed_at="2026-08-01T00:00:00Z")]
+    repos += [repo(f"filler{i}") for i in range(20)]
+    repos += [repo("tool", "Go", size=1, pushed_at="2019-01-01T00:00:00Z")]
+
+    prose, _ = select_repositories(repos, "We want a go-getter.", limit=1, threshold=10)
+    assert prose[0]["repository"]["name"] == "flagship"
+
+    named, _ = select_repositories(repos, "Backend engineer writing Go.", limit=1, threshold=10)
+    assert named[0]["repository"]["name"] == "tool"
