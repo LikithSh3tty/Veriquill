@@ -225,3 +225,40 @@ def test_an_evicted_job_still_reports_its_updates(factory):
 
     assert store.get(job.id).status == "done"
     assert store.get(job.id).dossier_id == 11
+
+
+def test_a_run_summary_is_stored_and_read_back(factory):
+    from veriquill.store import load_run, save_run
+
+    with factory() as session:
+        save_run(session, "abc123", "octocat", {"handle": "octocat", "repositories": []})
+    with factory() as session:
+        assert load_run(session, "abc123")["handle"] == "octocat"
+
+
+def test_an_unknown_run_is_refused_not_invented(factory):
+    from veriquill.store import StoreError, load_run
+
+    with factory() as session, pytest.raises(StoreError, match="not found"):
+        load_run(session, "nope")
+
+
+def test_old_run_summaries_are_pruned(factory, monkeypatch):
+    """They are large working state, and the dossier is what a decision rests on."""
+    from veriquill import store
+
+    monkeypatch.setattr(store, "RUN_RETENTION", 3)
+
+    for index in range(6):
+        with factory() as session:
+            store.save_run(session, f"run{index}", "octocat", {"n": index})
+
+    with factory() as session:
+        kept = session.scalars(
+            store.select(store.RunSummaryRecord.id)
+        ).all()
+
+    assert len(kept) == 3
+    # The newest survive; the oldest are the ones dropped.
+    assert "run5" in kept
+    assert "run0" not in kept

@@ -215,3 +215,25 @@ class IntakeJobRecord(Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+
+
+class RunSummaryRecord(Base):
+    """The summary one `/analyse` call produced, keyed by the id it handed back.
+
+    These used to live in a dict on the API process, on the argument that a run
+    is large, transient, and superseded by the dossier the moment one is built.
+    The first two are true and the third is not yet: the caller is given a run id
+    and has to fetch the summary separately, so a restart in between turns a
+    completed analysis into a 404. That reads as "this never ran" rather than
+    "this was lost", which is the same confusion intake jobs used to cause.
+
+    Working state, not evidence. A decision rests on the dossier, and these are
+    pruned once there are enough newer ones.
+    """
+
+    __tablename__ = "run_summaries"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    handle: Mapped[str] = mapped_column(String(120), index=True)
+    summary: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

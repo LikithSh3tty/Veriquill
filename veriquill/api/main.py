@@ -63,8 +63,10 @@ from veriquill.store import (
     get_comparison,
     list_candidates,
     list_rubrics,
+    load_run,
     save_dossier,
     save_rubric,
+    save_run,
 )
 
 
@@ -108,9 +110,12 @@ _analyses = FixedWindowLimiter(
 # a single origin can serve the interface and the API it talks to.
 router = APIRouter()
 
-# Analysis runs stay in-process: they are large, transient, and superseded by the
-# dossier the moment one is built. Everything a reviewer acts on lives in SQLite.
-_RUNS: dict[str, dict[str, Any]] = {}
+# Run summaries are persisted for the same reason intake jobs are. The old
+# argument for keeping them in a dict was that a run is large, transient, and
+# superseded by the dossier the moment one is built. The first two hold; the
+# third does not yet, because the caller is handed a run id and has to fetch the
+# summary separately. A restart in between turned a completed analysis into a
+# 404, which reads as "this never ran" rather than "this was lost".
 
 # Intake jobs are persisted. They are working state rather than evidence, but a
 # job the process forgets answers 404 to a browser that is polling it, and a 404
@@ -188,15 +193,18 @@ async def start_analysis(request: AnalyseRequest, http_request: Request) -> dict
     run_id = uuid4().hex
     settings = get_settings()
     summary = await analyse_candidate(request.handle, settings)
-    _RUNS[run_id] = summary.to_dict()
+    with _session() as session:
+        save_run(session, run_id, request.handle, summary.to_dict())
     return {"run_id": run_id, "status": "complete"}
 
 
 @router.get("/runs/{run_id}")
 def get_run(run_id: str) -> dict[str, Any]:
-    summary = _RUNS.get(run_id)
-    if summary is None:
-        raise HTTPException(status_code=404, detail="run not found")
+    with _session() as session:
+        try:
+            summary = load_run(session, run_id)
+        except StoreError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"run_id": run_id, "summary": summary}
 
 

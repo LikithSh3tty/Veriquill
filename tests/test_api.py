@@ -2,8 +2,33 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
-from veriquill.api.main import _RUNS, app
+from veriquill.api.main import app
 from veriquill.pipeline import RepoResult, RunSummary
+
+
+async def _fake_analyse(handle, settings, client=None, known_fingerprints=None):
+    return RunSummary(
+        handle=handle,
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
+        repositories=[RepoResult(full_name=f'{handle}/demo')],
+    )
+
+
+def _isolated_client(tmp_path, monkeypatch):
+    """An API client pointed at a temporary database of its own.
+
+    Run summaries are stored now, so a test that starts one would otherwise
+    write into whatever database the working directory happens to hold.
+    """
+    from veriquill.api import main as api_main
+    from veriquill.config import Settings, get_settings
+
+    get_settings.cache_clear()
+    settings = Settings(data_dir=tmp_path / '.veriquill')
+    monkeypatch.setattr(api_main, 'get_settings', lambda: settings)
+    settings.ensure_dirs()
+    return TestClient(app)
 
 
 def test_health_reports_version():
@@ -13,19 +38,9 @@ def test_health_reports_version():
     assert response.json()["status"] == "ok"
 
 
-def test_analyse_starts_a_run_and_run_is_retrievable(monkeypatch):
-    async def fake_analyse(handle, settings, client=None, known_fingerprints=None):
-        return RunSummary(
-            handle=handle,
-            started_at=datetime.now(timezone.utc),
-            finished_at=datetime.now(timezone.utc),
-            repositories=[RepoResult(full_name=f"{handle}/demo")],
-        )
-
-    monkeypatch.setattr("veriquill.api.main.analyse_candidate", fake_analyse)
-    _RUNS.clear()
-
-    client = TestClient(app)
+def test_analyse_starts_a_run_and_run_is_retrievable(tmp_path, monkeypatch):
+    monkeypatch.setattr("veriquill.api.main.analyse_candidate", _fake_analyse)
+    client = _isolated_client(tmp_path, monkeypatch)
     started = client.post("/analyse", json={"handle": "octocat"})
     assert started.status_code == 200
     run_id = started.json()["run_id"]
@@ -35,9 +50,23 @@ def test_analyse_starts_a_run_and_run_is_retrievable(monkeypatch):
     assert fetched.json()["summary"]["handle"] == "octocat"
 
 
-def test_unknown_run_returns_404():
-    client = TestClient(app)
+def test_unknown_run_returns_404(tmp_path, monkeypatch):
+    client = _isolated_client(tmp_path, monkeypatch)
     assert client.get("/runs/does-not-exist").status_code == 404
+
+
+def test_a_run_summary_survives_a_restart(tmp_path, monkeypatch):
+    """The reason to persist: a completed analysis must not become a 404."""
+    monkeypatch.setattr("veriquill.api.main.analyse_candidate", _fake_analyse)
+    client = _isolated_client(tmp_path, monkeypatch)
+    run_id = client.post("/analyse", json={"handle": "octocat"}).json()["run_id"]
+
+    # A fresh client over the same database is what a restart looks like here.
+    restarted = TestClient(app)
+    fetched = restarted.get(f"/runs/{run_id}")
+
+    assert fetched.status_code == 200
+    assert fetched.json()["summary"]["handle"] == "octocat"
 
 
 def test_the_same_api_answers_under_the_prefix_the_browser_bundle_uses():

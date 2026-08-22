@@ -25,6 +25,7 @@ from veriquill.models import (
     DossierRecord,
     IntakeJobRecord,
     RubricRecord,
+    RunSummaryRecord,
 )
 from veriquill.rank.score import score_candidate
 from veriquill.rubric import CustomDimension, Rubric
@@ -365,3 +366,34 @@ class SqlJobStore:
             # an abandoned job as still running.
             self._own.clear()
             return len(stale)
+
+
+#: How many run summaries to keep. They are large, they are working state, and
+#: the dossier a run produced is what a decision rests on, so old ones are
+#: dropped rather than kept forever in the one durable store.
+RUN_RETENTION = 200
+
+
+def save_run(session: Session, run_id: str, handle: str, summary: dict[str, Any]) -> None:
+    """Store what one `/analyse` call produced, and prune what is long past."""
+    session.add(
+        RunSummaryRecord(
+            id=run_id, handle=handle, summary=summary, created_at=_now()
+        )
+    )
+    session.flush()
+
+    stale = session.scalars(
+        select(RunSummaryRecord.id)
+        .order_by(RunSummaryRecord.created_at.desc(), RunSummaryRecord.id.desc())
+        .offset(RUN_RETENTION)
+    ).all()
+    for run in stale:
+        session.delete(session.get(RunSummaryRecord, run))
+
+
+def load_run(session: Session, run_id: str) -> dict[str, Any]:
+    record = session.get(RunSummaryRecord, run_id)
+    if record is None:
+        raise StoreError(f"run {run_id!r} not found")
+    return dict(record.summary or {})
