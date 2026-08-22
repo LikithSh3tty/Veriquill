@@ -216,19 +216,60 @@ def _named_as_a_language(term: str, haystack: str) -> bool:
     in the selection reasons like every other choice, and it never touches a
     score — which is the trade this whole module makes.
     """
+    return any(pattern.search(haystack) for pattern in _TERM_PATTERNS[term])
+
+
+def _compile_term_patterns(term: str) -> tuple[re.Pattern[str], ...]:
+    """The patterns that decide whether one term is being used as a language.
+
+    Built once at import. These used to be assembled and compiled on every call,
+    which meant re-escaping and re-joining the same sixty-odd alternatives for
+    every posting the selector looked at.
+    """
     boundary = rf"(?<!\w){re.escape(term)}(?!\w)"
     if term not in AMBIGUOUS_LANGUAGE_TERMS:
-        return re.search(boundary, haystack) is not None
+        return (re.compile(boundary),)
 
     lead_in = "|".join(_LANGUAGE_LEAD_IN)
     follow_on = "|".join(_LANGUAGE_FOLLOW_ON)
-    patterns = (
-        rf"(?:(?<=\s)|^)(?:{lead_in})\s+{boundary}",   # "written in Go"
-        rf"{boundary}\s+(?:{follow_on})(?!\w)",        # "Go services"
-        rf"{boundary}\s*[,/)]",                        # "Go, Postgres and Kafka"
-        rf"[(/]\s*{boundary}",                          # "Python/Go"
+    return tuple(
+        re.compile(pattern)
+        for pattern in (
+            rf"(?:(?<=\s)|^)(?:{lead_in})\s+{boundary}",  # "written in Go"
+            rf"{boundary}\s+(?:{follow_on})(?!\w)",       # "Go services"
+            rf"{boundary}\s*[,/)]",                       # "Go, Postgres and Kafka"
+            rf"[(/]\s*{boundary}",                        # "Python/Go"
+        )
     )
-    return any(re.search(pattern, haystack) for pattern in patterns)
+
+
+_TERM_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
+    term: _compile_term_patterns(term) for term in LANGUAGE_TERMS
+}
+
+# The unambiguous language names need no context and so need no separate scan
+# each: one alternation finds all of them in a single pass.
+_PLAIN_LANGUAGE_SCANNER = re.compile(
+    r"(?<!\w)(?:"
+    + "|".join(
+        re.escape(term)
+        for term in sorted(
+            (t for t in LANGUAGE_TERMS if t not in AMBIGUOUS_LANGUAGE_TERMS),
+            key=lambda t: (-len(t), t),
+        )
+    )
+    + r")(?!\w)"
+)
+
+# Frameworks are unambiguous by construction - the ambiguous ones were left out
+# of the table - so one alternation over all of them replaces one scan each.
+_FRAMEWORK_SCANNER = re.compile(
+    r"(?<!\w)(?:"
+    + "|".join(
+        re.escape(term) for term in sorted(FRAMEWORK_LANGUAGES, key=lambda t: (-len(t), t))
+    )
+    + r")(?!\w)"
+)
 
 
 def _languages_named(text: str) -> dict[str, str]:
@@ -241,16 +282,20 @@ def _languages_named(text: str) -> dict[str, str]:
     haystack = (text or "").lower()
     named: dict[str, str] = {}
 
-    for term, languages in FRAMEWORK_LANGUAGES.items():
-        if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", haystack):
-            for language in languages:
-                named.setdefault(language, term)
+    for match in _FRAMEWORK_SCANNER.finditer(haystack):
+        for language in FRAMEWORK_LANGUAGES[match.group(0)]:
+            named.setdefault(language, match.group(0))
 
     # An outright mention outranks an implication, so this runs second and
     # overwrites: "Django, and some TypeScript" should read as naming
     # TypeScript, not as implying it.
-    for term, language in LANGUAGE_TERMS.items():
+    for match in _PLAIN_LANGUAGE_SCANNER.finditer(haystack):
+        language = LANGUAGE_TERMS[match.group(0)]
+        named[language] = language.lower()
+
+    for term in AMBIGUOUS_LANGUAGE_TERMS:
         if _named_as_a_language(term, haystack):
+            language = LANGUAGE_TERMS[term]
             named[language] = language.lower()
 
     return named

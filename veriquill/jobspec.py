@@ -232,13 +232,13 @@ def _is_negated(haystack: str, start: int) -> bool:
     window_start = max(0, start - NEGATION_WINDOW)
     window = haystack[window_start:start]
 
-    boundaries = list(_CLAUSE_BOUNDARY.finditer(window))
-    if boundaries:
-        window = window[boundaries[-1].end():]
+    last_boundary = -1
+    for boundary in _CLAUSE_BOUNDARY.finditer(window):
+        last_boundary = boundary.end()
+    if last_boundary >= 0:
+        window = window[last_boundary:]
 
-    return any(
-        re.search(rf"(?<!\w){re.escape(cue)}(?!\w)", window) for cue in NEGATION_CUES
-    )
+    return _NEGATION_SCANNER.search(window) is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,37 +258,43 @@ class JobSpec:
         }
 
 
-def _matches(haystack: str) -> list[tuple[int, int, str, str]]:
-    """Every phrase occurrence in the text, as (start, end, dimension, phrase)."""
-    found: list[tuple[int, int, str, str]] = []
-    for dimension, phrases in SIGNALS.items():
-        for phrase in phrases:
-            pattern = rf"(?<!\w){re.escape(phrase)}(?!\w)"
-            for match in re.finditer(pattern, haystack):
-                found.append((match.start(), match.end(), dimension, phrase))
-    return found
+# Which dimension each phrase belongs to. Ties break on dimension name so the
+# result never depends on dict ordering: the same description has to derive the
+# same rubric, and that guarantee is why no model is allowed near this path.
+_PHRASE_DIMENSION: dict[str, str] = {}
+for _dimension, _phrases in sorted(SIGNALS.items()):
+    for _phrase in _phrases:
+        _PHRASE_DIMENSION.setdefault(_phrase, _dimension)
 
+# One pass, not one pass per phrase.
+#
+# Matching each phrase separately meant scanning the whole posting a hundred and
+# thirty times and then reconciling the overlaps afterwards, which was quadratic
+# in the number of hits. A single alternation does both jobs at once: `finditer`
+# already yields non-overlapping matches, so the overlap reconciliation that
+# used to be a separate quadratic pass is now a property of the scan.
+#
+# Alternatives are ordered longest first because Python's `re` takes the first
+# alternative that matches at a position, not the longest. That ordering turns
+# the engine's leftmost-first rule into leftmost-longest, which is the reading
+# the old resolver was reaching for: "end-to-end tests" is a sentence about
+# testing, and only reads as the authenticity phrase "end-to-end" if you stop
+# early.
+_SIGNAL_SCANNER = re.compile(
+    r"(?<!\w)(?:"
+    + "|".join(
+        re.escape(phrase)
+        for phrase in sorted(_PHRASE_DIMENSION, key=lambda p: (-len(p), p))
+    )
+    + r")(?!\w)"
+)
 
-def _resolve_overlaps(
-    matches: list[tuple[int, int, str, str]],
-) -> list[tuple[int, int, str, str]]:
-    """Where two phrases cover the same words, the longer one wins.
-
-    "end-to-end tests" is a sentence about testing. Read phrase by phrase it is
-    also the authenticity phrase "end-to-end", and both dimensions used to rise
-    off the same four words. Longest-match-first settles it the way a reader
-    would: the more specific phrase is the one the posting meant.
-
-    Ties break on dimension name so the result never depends on dict order.
-    """
-    kept: list[tuple[int, int, str, str]] = []
-    for start, end, dimension, phrase in sorted(
-        matches, key=lambda m: (-(m[1] - m[0]), m[0], m[2])
-    ):
-        if any(start < other_end and other_start < end for other_start, other_end, _, _ in kept):
-            continue
-        kept.append((start, end, dimension, phrase))
-    return kept
+# Negation cues, likewise collapsed into one pass over the window.
+_NEGATION_SCANNER = re.compile(
+    r"(?<!\w)(?:"
+    + "|".join(re.escape(cue) for cue in sorted(NEGATION_CUES, key=lambda c: (-len(c), c)))
+    + r")(?!\w)"
+)
 
 
 def read_job_description(text: str) -> JobSpec:
@@ -297,9 +303,10 @@ def read_job_description(text: str) -> JobSpec:
     emphases: dict[str, list[str]] = {}
     negated: dict[str, list[str]] = {}
 
-    for start, _end, dimension, phrase in sorted(_resolve_overlaps(_matches(haystack))):
-        bucket = negated if _is_negated(haystack, start) else emphases
-        phrases = bucket.setdefault(dimension, [])
+    for match in _SIGNAL_SCANNER.finditer(haystack):
+        phrase = match.group(0)
+        bucket = negated if _is_negated(haystack, match.start()) else emphases
+        phrases = bucket.setdefault(_PHRASE_DIMENSION[phrase], [])
         if phrase not in phrases:
             phrases.append(phrase)
 

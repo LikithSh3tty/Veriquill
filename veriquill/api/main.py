@@ -15,6 +15,7 @@ import shutil
 import tempfile
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -30,7 +31,7 @@ from fastapi import (
     UploadFile,
 )
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from veriquill import __version__
 from veriquill.api.interface import mount_interface
@@ -118,13 +119,33 @@ _RUNS: dict[str, dict[str, Any]] = {}
 _JOBS = SqlJobStore(lambda: _session())
 
 
+@lru_cache(maxsize=8)
+def _prepared_session_factory(db_path: Path, _data_dir: Path) -> sessionmaker[Session]:
+    """Build the engine once per database, not once per request.
+
+    This used to run inside `_session`, so every request constructed a new
+    engine and ran `create_all` before it could ask its question - eleven times
+    the cost of the query itself. That was tolerable while only comparatively
+    rare endpoints paid it; it stopped being tolerable when job polling, which
+    the interface repeats every 1.5 seconds, started going through here too.
+
+    Creating the working directories belongs here for the same reason: it is
+    two `mkdir` calls that only have to succeed once, and doing them per request
+    put filesystem syscalls on the path of every poll.
+
+    Keyed on both paths, so a test pointing at a fresh data directory gets a
+    fresh engine and its own directories rather than the last one's.
+    """
+    get_settings().ensure_dirs()
+    engine = make_engine(db_path)
+    init_db(engine)
+    return make_session_factory(engine)
+
+
 @contextmanager
 def _session() -> Iterator[Session]:
     settings = get_settings()
-    settings.ensure_dirs()
-    engine = make_engine(settings.db_path)
-    init_db(engine)
-    factory = make_session_factory(engine)
+    factory = _prepared_session_factory(settings.db_path, settings.data_dir)
     with factory() as session:
         yield session
         session.commit()
