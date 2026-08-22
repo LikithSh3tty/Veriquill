@@ -438,6 +438,19 @@ docker run -p 8000:8000 \
 The public page is then at `http://localhost:8000/`, the review screen at
 `http://localhost:8000/review.html?comparison=1`.
 
+**The default image cannot run either model pass.** It installs the package without
+the `llm` extra, so the anthropic SDK is absent and both passes skip with a log line
+whatever the environment says. That is the intended default and it makes the
+container fully deterministic, but it does mean setting
+`VERIQUILL_CODE_REVIEW_ENABLED=true` on a stock image does nothing. To allow them:
+
+```bash
+docker build --build-arg INSTALL_LLM=true -t veriquill .
+```
+
+Even then both stay off until switched on, and a key still has to reach the
+container. The extra makes them possible, not active.
+
 **Mount a volume on `/data`.** Clones, caches, and the SQLite database live there; a
 container that loses it loses every stored dossier. Git is installed in the image because
 the provenance engine reads real commit history out of a clone.

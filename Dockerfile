@@ -27,7 +27,19 @@ WORKDIR /app
 # caches on dependency changes rather than on every edit.
 COPY pyproject.toml README.md ./
 COPY veriquill/ ./veriquill/
-RUN pip install --no-cache-dir .
+
+# The two optional model passes need the anthropic SDK, which is an optional
+# dependency. The default image does not carry it, so those passes stay off no
+# matter what the environment says, and the container is fully deterministic.
+#
+# Build with --build-arg INSTALL_LLM=true to include it. Even then both passes
+# stay off until switched on: the extra makes them possible, not active.
+ARG INSTALL_LLM=false
+RUN if [ "$INSTALL_LLM" = "true" ]; then \
+        pip install --no-cache-dir ".[llm]"; \
+    else \
+        pip install --no-cache-dir .; \
+    fi
 
 COPY --from=interface /ui/dist/ ./ui/dist/
 
