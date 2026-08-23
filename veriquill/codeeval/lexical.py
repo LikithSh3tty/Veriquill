@@ -208,18 +208,26 @@ def security_findings(
     because a false accusation costs a candidate more than a missed flag costs a
     recruiter. What is shared is the shape of the report, including the sentence
     telling the reader to confirm the context.
+
+    Files are the outer loop and patterns the inner one, so each file is read
+    from disk and stripped once rather than once per pattern. With five patterns
+    that was five times the work for the same answer.
     """
-    findings: list[Finding] = []
+    hits_by_pattern: dict[str, list[tuple[Path, int, str]]] = {spec.name: [] for spec in patterns}
 
-    for spec in patterns:
-        hits: list[tuple[Path, int, str]] = []
-        for path in files:
-            source = read_source(path, noise, comments, keep_literals=True)
-            if source is None:
-                continue
+    for path in files:
+        source = read_source(path, noise, comments, keep_literals=True)
+        if source is None:
+            continue
+        for spec in patterns:
             for match in spec.pattern.finditer(source):
-                hits.append((path, line_of(source, match.start()), match.group(0).strip()))
+                hits_by_pattern[spec.name].append(
+                    (path, line_of(source, match.start()), match.group(0).strip())
+                )
 
+    findings: list[Finding] = []
+    for spec in patterns:
+        hits = hits_by_pattern[spec.name]
         if not hits:
             continue
 
