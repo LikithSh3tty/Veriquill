@@ -238,3 +238,66 @@ def test_an_unmeasured_dimension_cannot_carry_a_score():
         DimensionScore(
             dimension="security", score=0.5, coverage=0.0, evidence=(), basis="none"
         )
+
+
+# --- coverage means the same thing in every dimension ----------------------
+
+
+def _partial(considered: int, analysed: int) -> dict:
+    """A dossier for an account read most-relevant-first."""
+    return {
+        "handle": "alice",
+        "analysis_coverage": {
+            "repositories_considered": considered,
+            "repositories_analysed": analysed,
+            "repositories_with_authored_code": analysed,
+            "repositories_deep_analysed": analysed,
+            "claims_total": 0,
+            "claims_resolved": 0,
+        },
+        "red_flag_register": [],
+        "code_quality_snapshot": [{"repository": f"alice/r{i}"} for i in range(analysed)],
+    }
+
+
+def test_a_partial_read_lowers_coverage_in_every_dimension():
+    """Four of five used to report full coverage over a quarter of an account.
+
+    A narrow band over thin evidence is what makes two candidates look
+    separated when the evidence does not separate them.
+    """
+    scored = {d.dimension: d for d in score_dimensions(_partial(21, 5))}
+
+    for name in ("authenticity", "code_quality", "test_quality", "security", "breadth"):
+        assert scored[name].coverage == pytest.approx(5 / 21), name
+
+
+def test_a_full_read_still_reports_full_coverage():
+    scored = {d.dimension: d for d in score_dimensions(_partial(5, 5))}
+
+    for dimension in scored.values():
+        if dimension.measured:
+            assert dimension.coverage == 1.0, dimension.dimension
+
+
+def test_a_partial_read_widens_the_band_without_touching_the_score():
+    """The rule the whole design rests on: thin evidence never lowers a score."""
+    from veriquill.rank.score import score_candidate
+    from veriquill.rubric import Rubric
+
+    rubric = Rubric.from_dict({"name": "r"})
+    full = score_candidate(_partial(5, 5), rubric)
+    partial = score_candidate(_partial(21, 5), rubric)
+
+    assert partial.score == full.score
+    assert partial.width > full.width
+    assert partial.confidence == "low"
+    assert full.confidence == "high"
+
+
+def test_nothing_cloned_leaves_every_repository_dimension_unmeasured():
+    scored = {d.dimension: d for d in score_dimensions(_partial(21, 0))}
+
+    for name in ("authenticity", "code_quality", "test_quality", "security", "breadth"):
+        assert not scored[name].measured, name
+        assert scored[name].score is None, name

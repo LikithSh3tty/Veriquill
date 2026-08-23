@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-690%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-694%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 690 Python tests; ui/ carries 76 more
+├── tests/                    # 694 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -400,7 +400,9 @@ nothing is cloned in order to decide whether to clone it. Every selected reposit
 records why it was chosen, and every skipped one is named.
 
 **Skipping is coverage, never a finding.** The dossier counts the whole account, so
-reading 5 of 21 lowers coverage and widens the confidence band. A partial look must
+reading 5 of 21 lowers coverage in every repository dimension and widens the
+confidence band: a quarter-read account comes back at 0.24 coverage and low
+confidence, not at 0.71 and moderate. A partial look must
 never read as a full one, and a candidate is never marked down for work the tool chose
 not to read. The ordering among equally relevant repositories falls back to size and
 recency, which is a proxy rather than a judgment of merit.

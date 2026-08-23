@@ -4,6 +4,16 @@ Every scorer returns a score, the share of the portfolio it was able to look at,
 and the evidence behind both. Absence of evidence lowers coverage. It never
 lowers a score: "we could not tell" and "this is weak" are different sentences,
 and a recruiter has to be able to tell them apart.
+
+Coverage means one thing everywhere: the share of what was being judged that
+was actually seen. Getting that wrong in the generous direction is the worst
+mistake available here, because it presents a narrow confidence band over thin
+evidence, and a narrow band is what makes two candidates look separated.
+
+Four of the five repository dimensions used to report full coverage on a
+partial read. An account of twenty-one repositories with five of them cloned
+came back at 0.71 aggregate coverage and moderate confidence, when the tool
+had seen under a quarter of it.
 """
 
 from __future__ import annotations
@@ -48,6 +58,21 @@ def _repos(count: int) -> str:
 
 def _coverage(dossier: dict[str, Any]) -> dict[str, int]:
     return dossier.get("analysis_coverage") or {}
+
+
+def _account_read(dossier: dict[str, Any]) -> float:
+    """How much of the account was cloned at all.
+
+    A large account is read most-relevant-first and the rest is named as
+    unread. Every repository dimension is therefore judging a sample, and its
+    coverage has to say so however complete the sample itself looked.
+    """
+    counts = _coverage(dossier)
+    considered = counts.get("repositories_considered", 0)
+    analysed = counts.get("repositories_analysed", 0)
+    if considered <= 0:
+        return 1.0 if analysed else 0.0
+    return min(1.0, analysed / considered)
 
 
 def _live_flags(
@@ -160,7 +185,11 @@ def _codeeval_dimension(
     counts = _coverage(dossier)
     deep = counts.get("repositories_deep_analysed", 0)
     authored = counts.get("repositories_with_authored_code", 0)
-    if deep == 0:
+    # Nothing cloned means nothing seen, whatever else the counts say. A
+    # dimension with no coverage must carry no number, which DimensionScore
+    # enforces rather than trusts.
+    read = _account_read(dossier)
+    if deep == 0 or read <= 0.0:
         return _unmeasured(
             dimension,
             "no repository was analysed in depth; Python, TypeScript, JavaScript, Go and "
@@ -172,7 +201,7 @@ def _codeeval_dimension(
         dossier,
         _live_flags(dossier, dismissed, predicate),
         deep,
-        min(1.0, deep / max(1, authored)),
+        min(1.0, deep / max(1, authored)) * read,
         clean_detail,
     )
 
@@ -269,7 +298,10 @@ def score_breadth(dossier: dict[str, Any], dismissed: frozenset[str]) -> Dimensi
     return DimensionScore(
         dimension="breadth",
         score=round(min(1.0, authored / FULL_BREADTH_REPOS), 6),
-        coverage=1.0,
+        # Breadth counts repositories holding authored code, and it can only
+        # count the ones that were read. How many of the unread ones hold any
+        # is exactly what nobody knows.
+        coverage=_account_read(dossier),
         evidence=evidence,
         basis=(
             f"{_repos(authored)} hold authored code; "
