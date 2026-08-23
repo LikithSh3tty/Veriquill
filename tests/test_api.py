@@ -88,7 +88,7 @@ def test_the_prefixed_copy_stays_out_of_the_schema():
     assert not [path for path in paths if path.startswith("/api/")]
 
 
-def _seeded_client(tmp_path, monkeypatch, flagged=True):
+def _seeded_client(tmp_path, monkeypatch, flagged=True, keys=None):
     """An API client pointed at a temporary database holding one stored dossier."""
     from tests.test_dimensions import flag, make_dossier
     from veriquill.api import main as api_main
@@ -97,8 +97,9 @@ def _seeded_client(tmp_path, monkeypatch, flagged=True):
     from veriquill.store import save_dossier
 
     get_settings.cache_clear()
-    settings = Settings(data_dir=tmp_path / ".veriquill")
+    settings = Settings(data_dir=tmp_path / ".veriquill", api_keys=keys or {})
     monkeypatch.setattr(api_main, "get_settings", lambda: settings)
+    monkeypatch.setattr("veriquill.api.auth.get_settings", lambda: settings)
     settings.ensure_dirs()
 
     engine = make_engine(settings.db_path)
@@ -113,6 +114,27 @@ def _seeded_client(tmp_path, monkeypatch, flagged=True):
         session.commit()
 
     return TestClient(api_main.app)
+
+
+def _seeded_comparison(tmp_path, monkeypatch, keys=None):
+    """A client, and one comparison sitting pending review."""
+    from veriquill.rubric import DIMENSIONS
+
+    client = _seeded_client(tmp_path, monkeypatch, keys=keys)
+    headers = (
+        {"Authorization": f"Bearer {next(iter(keys))}"} if keys else {}
+    )
+    client.post(
+        "/rubrics",
+        json={"name": "backend", "weights": {d: 1.0 for d in DIMENSIONS}},
+        headers=headers,
+    )
+    created = client.post(
+        "/comparisons",
+        json={"rubric": "backend", "candidates": ["alpha"]},
+        headers=headers,
+    )
+    return client, created.json()["comparison_id"]
 
 
 def test_rubric_and_comparison_lifecycle_over_http(tmp_path, monkeypatch):

@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-562%20Python%20%2B%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-585%20Python%20%2B%20Vitest-brightgreen)
 
 </div>
 
@@ -198,7 +198,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 562 Python tests; ui/ carries 76 more
+├── tests/                    # 585 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -468,12 +468,33 @@ use.
 
 ## A note on security
 
-**There is no authentication in front of any of this.** `--actor` is whatever the caller
-types, and every endpoint is open. Until that changes, run it somewhere only the hiring
-team can reach. A deployment that matters must supply an authenticated identity, because
-the audit log is only as trustworthy as the name written into it.
+**The API takes keys, and is open until you set them.**
 
-What is in place is the floor beneath authentication, not a replacement for it. Request
+```bash
+VERIQUILL_API_KEYS='{"sk_change_me": "you@example.com"}'
+```
+
+Each key maps to the identity it acts as, and that identity is what gets written into
+the audit log. **A key cannot sign an action as anyone else**: name a different actor in
+the request and it is refused with a 403 rather than quietly overwritten, because the
+request meant something by it and silently rewriting it would leave the caller believing
+they had recorded something they had not. Leave the actor out and it is filled in.
+
+That is the point of the whole feature. The review gate promises that replaying its
+rows reconstructs any state a comparison has held, and while the actor was just a string
+in the request body, anyone could sign an override with anyone's name. An append-only
+log of unverified names is not an audit trail.
+
+Keys are compared with a constant-time comparison, so a wrong key takes the same time to
+reject as a right one. `/health` stays open, because a liveness probe cannot be expected
+to hold credentials.
+
+**With no keys set, every endpoint is open** and the server says so in a warning at
+startup. That is what a local run needs and what a shared deployment must not have. The
+CLI is unaffected either way: `--actor` there is still whatever the caller types, since
+anyone who can run the CLI already has the database.
+
+What follows is the floor beneath authentication, not a replacement for it. Request
 bodies are capped before anything reads them, including chunked bodies that declare no
 length; uploads are read in bounded chunks so an oversized file costs one chunk and a
 refusal rather than the memory it claimed; job descriptions are length-capped; and each
@@ -508,12 +529,16 @@ controls, bias audit, and disclosure pack (M6).
 
 ## Things I'd add next
 
-- Deep static analysis for a second language, so a non-Python portfolio stops costing
-  the candidate coverage.
-- Real authentication in front of the API, so `--actor` means something and the audit
-  log can be trusted on its own.
+- Depth for Go and Java, on the same read-rather-than-run approach TypeScript uses, so
+  fewer portfolios cost their candidate coverage.
+- A key entry in the dashboard, so the review screen works against an API that has keys
+  configured rather than only against an open one.
+- Ground truth from labelled real portfolios. The evaluation harness measures the checks
+  against synthetic repositories built to a known shape, which proves a check fires on
+  what was constructed and not that its thresholds are right in the world.
 - Incremental re-analysis: re-read only what changed since the last dossier instead of
-  re-cloning a portfolio.
+  re-cloning a portfolio. It needs a cache-invalidation rule first, since a rewritten
+  history is exactly what the provenance engine exists to notice.
 - End-to-end tests through the dashboard, not just component and API-client tests.
 
 ## Limits of this tool

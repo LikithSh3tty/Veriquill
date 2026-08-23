@@ -85,9 +85,19 @@ class Settings(BaseSettings):
     )
     max_retry_attempts: int = 5
 
-    # Caps on the HTTP surface. There is no authentication in front of it, so
-    # these keep a misconfigured deployment costing a 413 or a 429 rather than
-    # the process. Set a limit to 0 to disable it behind your own gateway.
+    # Who may call the API, as {key: actor}. The actor is the name written into
+    # the audit log, so it should be a real identity rather than a label.
+    #
+    # Empty means the server is open and every review action is signed with a
+    # name nobody verified. That is what a local run needs and what a shared
+    # deployment must not have, so the server warns about it at startup.
+    #
+    # Set it as JSON: VERIQUILL_API_KEYS='{"sk_...": "alice@example.com"}'
+    api_keys: dict[str, str] = Field(default_factory=dict)
+
+    # Caps on the HTTP surface. These keep a misconfigured deployment costing a
+    # 413 or a 429 rather than the process, and they apply whether or not keys
+    # are configured. Set a limit to 0 to disable it behind your own gateway.
     api_max_request_bytes: int = Field(
         default=6 * 1024 * 1024,
         description=(

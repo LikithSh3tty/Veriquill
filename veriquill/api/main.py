@@ -5,8 +5,10 @@ carries review actions through to the gate. Every refusal the review layer makes
 is surfaced as a status code rather than smoothed over: a pending comparison
 returns 409, because "not yet reviewed" is a real state and not an error to hide.
 
-There is no authentication here. `actor` is whatever the caller supplies, and a
-real deployment has to put an authenticated identity in that field.
+Authentication is opt in and off until keys are configured. Where they are, the
+actor written into the audit log comes from the caller's key rather than from the
+request body, because an append-only log of unverified names is not an audit
+trail. See `veriquill.api.auth`.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from uuid import uuid4
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Depends,
     FastAPI,
     File,
     Form,
@@ -34,6 +37,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, sessionmaker
 
 from veriquill import __version__
+from veriquill.api.auth import (
+    ANONYMOUS,
+    PUBLIC_PATHS,
+    Identity,
+    actor_for,
+    resolve,
+    warn_if_open,
+)
 from veriquill.api.interface import mount_interface
 from veriquill.api.limits import (
     BodySizeLimitMiddleware,
@@ -79,6 +90,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     would show work in progress that nothing is doing. Say it was interrupted so
     the recruiter resubmits.
     """
+    warn_if_open()
     _JOBS.abandon_unfinished(
         "the server restarted while this analysis was running; submit the candidate again"
     )
@@ -105,10 +117,26 @@ _analyses = FixedWindowLimiter(
     window_seconds=_limit_settings.api_rate_limit_window_seconds,
 )
 
+def _authenticate(request: Request) -> Identity:
+    """Resolve the caller once per request, and hang it on the request.
+
+    A router-level dependency rather than middleware, so it covers every API
+    route under both mountings and leaves the static interface alone: the
+    dashboard has to load before it can ask anyone for a key.
+    """
+    identity = ANONYMOUS if request.url.path in PUBLIC_PATHS else resolve(request)
+    request.state.identity = identity
+    return identity
+
+
+def _identity(request: Request) -> Identity:
+    return getattr(request.state, "identity", ANONYMOUS)
+
+
 # Every route is defined once and served twice: at the root, where the CLI and
 # the docs address it, and under /api, where the browser bundle addresses it so
 # a single origin can serve the interface and the API it talks to.
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(_authenticate)])
 
 # Run summaries are persisted for the same reason intake jobs are. The old
 # argument for keeping them in a dict was that a run is large, transient, and
@@ -166,7 +194,11 @@ class ComparisonRequest(BaseModel):
 
 
 class ReviewRequest(BaseModel):
-    actor: str
+    # Optional, because an authenticated caller's identity comes from their key.
+    # Supplying a different one is refused rather than ignored: the request meant
+    # something by it, and silently overwriting it would leave the caller
+    # believing they had recorded something they had not.
+    actor: str = ""
     action: str
     candidate: str
     reason: str
@@ -174,7 +206,7 @@ class ReviewRequest(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
-    actor: str
+    actor: str = ""
 
 
 class JobDescriptionRequest(BaseModel):
@@ -254,7 +286,10 @@ def read_comparison(comparison_id: int) -> dict[str, Any]:
 
 
 @router.post("/comparisons/{comparison_id}/review")
-def review_comparison(comparison_id: int, request: ReviewRequest) -> dict[str, Any]:
+def review_comparison(
+    comparison_id: int, request: ReviewRequest, http_request: Request
+) -> dict[str, Any]:
+    actor = actor_for(_identity(http_request), request.actor)
     with _session() as session:
         try:
             comparison = get_comparison(session, comparison_id)
@@ -264,7 +299,7 @@ def review_comparison(comparison_id: int, request: ReviewRequest) -> dict[str, A
             record_action(
                 session,
                 comparison,
-                actor=request.actor,
+                actor=actor,
                 action=request.action,
                 candidate=request.candidate,
                 target=request.target,
@@ -276,14 +311,17 @@ def review_comparison(comparison_id: int, request: ReviewRequest) -> dict[str, A
 
 
 @router.post("/comparisons/{comparison_id}/approve")
-def approve_endpoint(comparison_id: int, request: ApprovalRequest) -> dict[str, Any]:
+def approve_endpoint(
+    comparison_id: int, request: ApprovalRequest, http_request: Request
+) -> dict[str, Any]:
+    actor = actor_for(_identity(http_request), request.actor)
     with _session() as session:
         try:
             comparison = get_comparison(session, comparison_id)
         except StoreError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         try:
-            approve_comparison(session, comparison, request.actor)
+            approve_comparison(session, comparison, actor)
         except ReviewError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"comparison_id": comparison.id, "status": comparison.status}
