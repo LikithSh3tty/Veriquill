@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from veriquill.codeeval.detect import LanguageProfile
+from veriquill.codeeval.lexical import body_end, line_of, strip_spans
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
@@ -153,37 +154,14 @@ class FunctionSpan:
     complexity: int
 
 
-def _blank(match: re.Match[str]) -> str:
-    """Replace a span with spaces, keeping its newlines.
-
-    Replacing rather than deleting keeps every later index and line count
-    honest, so a finding cites the line the reader will actually see.
-    """
-    return re.sub(r"[^\n]", " ", match.group(0))
-
-
 def _strip_noise(source: str) -> str:
     """Blank comments and literals. For anything that counts code."""
-    return _NOISE.sub(_blank, source)
+    return strip_spans(source, _NOISE)
 
 
 def _strip_comments(source: str) -> str:
     """Blank comments, keep literals. For anything that reads what code says."""
-    return _COMMENTS_ONLY.sub(_blank, source)
-
-
-def _body_end(source: str, open_brace: int) -> int:
-    """Index just past the brace that closes the one at `open_brace`."""
-    depth = 0
-    for index in range(open_brace, len(source)):
-        char = source[index]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return index + 1
-    return len(source)
+    return strip_spans(source, _COMMENTS_ONLY)
 
 
 def _functions(source: str) -> list[FunctionSpan]:
@@ -206,11 +184,11 @@ def _functions(source: str) -> list[FunctionSpan]:
                 continue
             seen.add(open_brace)
 
-            body = source[open_brace : _body_end(source, open_brace)]
+            body = source[open_brace : body_end(source, open_brace)]
             spans.append(
                 FunctionSpan(
                     name=name,
-                    line=source.count("\n", 0, match.start()) + 1,
+                    line=line_of(source, match.start()),
                     complexity=1 + len(_DECISIONS.findall(body)),
                 )
             )
@@ -320,7 +298,7 @@ def check_typescript_tests(
         for pattern in _TRIVIAL_ASSERTIONS:
             for match in pattern.finditer(source):
                 trivial.append(
-                    (path, source.count("\n", 0, match.start()) + 1, match.group(0).strip())
+                    (path, line_of(source, match.start()), match.group(0).strip())
                 )
 
     if not trivial or total == 0:
@@ -366,7 +344,7 @@ def check_typescript_security(
                 continue
             for match in pattern.finditer(source):
                 hits.append(
-                    (path, source.count("\n", 0, match.start()) + 1, match.group(0).strip())
+                    (path, line_of(source, match.start()), match.group(0).strip())
                 )
 
         if not hits:
