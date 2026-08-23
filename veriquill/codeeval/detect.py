@@ -51,6 +51,20 @@ class LanguageProfile:
     root: Path = Path(".")
 
 
+def is_python_test_file(path: Path) -> bool:
+    """Both conventions pytest collects, plus the directory it collects from.
+
+    This lives here because two analysers were deciding it separately and
+    disagreeing. `tests.py` knew `test_*.py` and `*_test.py`; `structure.py`
+    knew only the first, so a candidate who names their files `parser_test.py`
+    had every one of them reported as a module nothing imports. The naming
+    convention they chose is not a defect.
+    """
+    if path.name.startswith("test_") or path.name.endswith("_test.py"):
+        return True
+    return any(part in {"tests", "test"} for part in path.parts[:-1])
+
+
 def _count_lines(path: Path) -> int:
     try:
         with path.open("rb") as handle:

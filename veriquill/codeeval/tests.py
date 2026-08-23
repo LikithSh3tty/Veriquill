@@ -7,9 +7,8 @@ that actually assert something.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
-from veriquill.codeeval.detect import LanguageProfile
+from veriquill.codeeval.detect import LanguageProfile, is_python_test_file
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
@@ -17,9 +16,7 @@ from veriquill.findings import EvidenceRef, Finding, Severity
 TRIVIAL_RATIO_THRESHOLD = 0.5
 
 
-def _is_test_file(path: Path) -> bool:
-    name = path.name
-    return name.startswith("test_") or name.endswith("_test.py")
+_is_test_file = is_python_test_file
 
 
 def _is_trivial(node: ast.Assert) -> bool:

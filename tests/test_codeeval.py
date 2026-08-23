@@ -291,3 +291,76 @@ def test_a_single_path_over_budget_still_gets_analysed():
     groups = list(batches([Path("x" * 100)], budget=10))
 
     assert groups == [["x" * 100]]
+
+
+# --- dead-module detection does not punish a convention or a framework ------
+
+
+def _orphans(root: Path) -> list[str]:
+    from veriquill.codeeval.structure import check_structure
+
+    findings = check_structure(_ctx(root), profile_repo(root), _settings(root))
+    return sorted(e.path for f in findings for e in f.evidence)
+
+
+def _library(root: Path) -> None:
+    """Five modules past the entry-point filter, two of which nothing imports.
+
+    Five is the minimum the check will look at, so a smaller fixture would pass
+    by staying silent rather than by getting the answer right.
+    """
+    _write(root, "app/__init__.py", "")
+    _write(root, "app/helpers.py", "def helper():\n    return 1\n")
+    _write(root, "app/core.py", "from app.helpers import helper\n\n\ndef go():\n    return 1\n")
+    _write(root, "app/a.py", "def go():\n    return 1\n")
+    _write(root, "app/b.py", "from app.a import go\n")
+    _write(root, "app/runner.py", "from app.core import go\n\n\ndef run():\n    return go()\n")
+
+
+def test_the_two_pytest_naming_conventions_are_scored_the_same(tmp_path):
+    """`structure.py` knew `test_*.py`; `tests.py` knew both. So a candidate
+    naming files `parser_test.py` had every test reported as dead code."""
+    prefix, suffix = tmp_path / "prefix", tmp_path / "suffix"
+    for root, names in (
+        (prefix, ("test_calculator.py", "test_parser.py")),
+        (suffix, ("calculator_test.py", "parser_test.py")),
+    ):
+        _library(root)
+        for name in names:
+            _write(root, name, "from app.core import go\n\n\ndef test_go():\n    assert go() == 1\n")
+
+    assert _orphans(prefix) == _orphans(suffix)
+    assert not any("test" in path for path in _orphans(suffix))
+
+
+def test_a_module_in_a_tests_directory_is_not_dead_code(tmp_path):
+    _library(tmp_path)
+    _write(tmp_path, "tests/fixtures.py", "SAMPLE = 1\n")
+    _write(tmp_path, "tests/test_app.py", "from app.core import go\n\n\ndef test_go():\n    assert go()\n")
+
+    assert "tests/fixtures.py" not in _orphans(tmp_path)
+
+
+def test_framework_entry_points_are_not_reported_as_dead(tmp_path):
+    """Django reaches these through configuration strings, never an import.
+
+    Being marked down for choosing Django is not a code-quality signal.
+    """
+    _write(tmp_path, "manage.py", "import os\n")
+    _write(tmp_path, "proj/__init__.py", "")
+    _write(tmp_path, "proj/settings.py", "DEBUG = True\n")
+    _write(tmp_path, "proj/urls.py", "urlpatterns = []\n")
+    _write(tmp_path, "proj/wsgi.py", "application = None\n")
+    _write(tmp_path, "proj/asgi.py", "application = None\n")
+    _write(tmp_path, "app/__init__.py", "")
+    _write(tmp_path, "app/models.py", "def go():\n    return 1\n")
+    _write(tmp_path, "app/views.py", "from app.models import go\n")
+
+    assert _orphans(tmp_path) == []
+
+
+def test_a_module_nothing_imports_is_still_reported(tmp_path):
+    """The check has to keep working, or the exclusions have gone too far."""
+    _library(tmp_path)
+
+    assert _orphans(tmp_path) == ["app/b.py", "app/runner.py"]

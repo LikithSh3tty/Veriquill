@@ -1,15 +1,31 @@
-"""Module structure: modules nothing imports and cannot be entry points."""
+"""Module structure: modules nothing imports and cannot be entry points.
+
+The check is only as good as its idea of what an entry point is, and a module
+reached by configuration is not dead just because no import statement names
+it. A Django layout drew four findings for `manage.py`, `settings.py`,
+`urls.py`, and `asgi.py`, every one of which is invoked by the framework
+through a string. Being marked down for choosing Django is not a code-quality
+signal.
+
+It errs toward silence for the reason the rest of this package does: a false
+accusation costs a candidate more than a missed flag costs a recruiter. Each
+name excluded here is one that can no longer be reported, which weakens the
+check; reporting a framework's own conventions as dead code would make it
+wrong.
+"""
 
 from __future__ import annotations
 
 import ast
 from pathlib import Path
 
-from veriquill.codeeval.detect import LanguageProfile
+from veriquill.codeeval.detect import LanguageProfile, is_python_test_file
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
 
+# Invoked by a runtime, a framework, or a packaging entry point rather than
+# by an import statement, so 'nothing imports it' is true and says nothing.
 _ENTRYPOINT_NAMES = {
     "__init__.py",
     "__main__.py",
@@ -18,6 +34,20 @@ _ENTRYPOINT_NAMES = {
     "cli.py",
     "setup.py",
     "conftest.py",
+    # Django and the layouts that copy it
+    "manage.py",
+    "settings.py",
+    "urls.py",
+    "wsgi.py",
+    "asgi.py",
+    "admin.py",
+    "apps.py",
+    # Task runners and servers started by name
+    "celery.py",
+    "tasks.py",
+    "routes.py",
+    "run.py",
+    "server.py",
 }
 _MIN_MODULES = 5
 
@@ -52,7 +82,7 @@ def check_structure(
         path
         for path in modules
         if _module_name(path, profile.root).split(".")[-1] not in imported
-        and not path.name.startswith("test_")
+        and not is_python_test_file(path)
     ]
 
     if len(orphans) < 2:
