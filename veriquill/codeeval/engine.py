@@ -16,6 +16,12 @@ from veriquill.codeeval.golang import (
     check_go_security,
     check_go_tests,
 )
+from veriquill.codeeval.java import (
+    check_java_complexity,
+    check_java_exception_handling,
+    check_java_security,
+    check_java_tests,
+)
 from veriquill.codeeval.reviewer import DesignReviewer
 from veriquill.codeeval.security import check_security
 from veriquill.codeeval.structure import check_structure
@@ -45,6 +51,10 @@ _ANALYSERS = (
     check_go_security,
     check_go_tests,
     check_go_error_handling,
+    check_java_complexity,
+    check_java_security,
+    check_java_tests,
+    check_java_exception_handling,
 )
 
 

@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-617%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-652%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -46,8 +46,8 @@ imported once.
   the commits they are being credited for.
 - **Evaluates code by static analysis.** Cyclomatic complexity, security hygiene,
   lint compliance, dead modules nothing imports, and test quality measured by
-  assertion meaningfulness rather than test count. Python, TypeScript, JavaScript
-  and Go are analysed in depth; other languages are detected, counted, and the
+  assertion meaningfulness rather than test count. Python, TypeScript, JavaScript,
+  Go and Java are analysed in depth; other languages are detected, counted, and the
   output says so explicitly.
 - **Reconciles documents against evidence.** Résumé and LinkedIn claims are extracted,
   matched to repositories, and marked corroborated, uncorroborated, or contradicted,
@@ -120,16 +120,17 @@ rather than a convention: a `Finding` with empty evidence cannot be constructed.
 ### Languages
 
 Python is analysed with a real syntax tree, through radon, bandit and ruff.
-TypeScript, JavaScript and Go are analysed by reading the source as text: complexity
-counted from decision keywords, test quality from whether a test can fail at all, and
-a short list of security-hygiene patterns.
+TypeScript, JavaScript, Go and Java are analysed by reading the source as text:
+complexity counted from decision keywords, test quality from whether a test can fail
+at all, and a short list of security-hygiene patterns.
 
 **Nothing in that path executes anything from the repository.** The obvious way to
-get this depth is `tsc`, `eslint`, and `go vet`, and all of them run code the
-candidate wrote: config files are JavaScript, plugins are arbitrary packages,
-`npm install` runs lifecycle scripts, and building Go runs its generators and
-whatever its modules pull in. Veriquill clones repositories it has every reason to
-treat as untrusted, so it reads rather than runs.
+get this depth is `tsc`, `eslint`, `go vet`, and a Maven or Gradle build, and all of
+them run code the candidate wrote: config files are JavaScript, plugins are arbitrary
+packages, `npm install` runs lifecycle scripts, building Go runs its generators, and
+a JVM build runs its own build scripts and annotation processors before any analyser
+sees a class file. Veriquill clones repositories it has every reason to treat as
+untrusted, so it reads rather than runs.
 
 Go suits this approach better than most languages. It has no ternary, no
 exceptions, one loop keyword, and gofmt means almost every repository is shaped the
@@ -140,6 +141,15 @@ with the language, a test that never calls `t.Error`, `t.Fatal` or an assertion
 helper cannot fail whatever else it does. Errors discarded into `_` are reported
 separately, and only once there are enough to read as a habit rather than a
 deliberate choice.
+
+Java is the hardest of the four to read this way, because modifiers stack, generics
+nest inside parameter lists, and a constructor looks like a method with no return
+type. Method detection there is deliberately conservative: it would rather miss a
+method than report a `catch` block as one, since a complexity figure attributed to
+something that is not a function is worse than one that is absent. Its own version of
+Go's discarded error is the empty `catch`, reported on the same terms. A catch whose
+only content is a comment explaining itself does not count, because that is a
+decision, and the check is looking for the absence of one.
 
 That buys real evidence where there was none before, and it costs precision. A
 lexical count tracks the cyclomatic number closely on ordinary code and can drift
@@ -209,7 +219,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 617 Python tests; ui/ carries 76 more
+├── tests/                    # 652 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -545,8 +555,6 @@ controls, bias audit, and disclosure pack (M6).
 
 ## Things I'd add next
 
-- Depth for Java, on the same read-rather-than-run approach the others use, so fewer
-  portfolios cost their candidate coverage.
 - Ground truth from labelled real portfolios. The evaluation harness measures the checks
   against synthetic repositories built to a known shape, which proves a check fires on
   what was constructed and not that its thresholds are right in the world.
