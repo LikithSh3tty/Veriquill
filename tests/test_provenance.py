@@ -278,11 +278,15 @@ def test_a_real_fork_is_still_flagged(tmp_path):
     assert "upstream/core" in findings[0].rationale
 
 
+#: One base moment for every synthetic history below.
+_ORIGIN = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
 # --- machines are not co-authors, and not co-suspects ----------------------
 
 
 def _commit(index: int, name: str, email: str, files=()) -> Commit:
-    moment = datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=index)
+    moment = _ORIGIN + timedelta(hours=index)
     return Commit(
         sha=f"{index:040x}",
         author_name=name,
@@ -394,3 +398,78 @@ def test_a_candidate_committing_a_vendored_tree_is_still_inflation(tmp_path):
     findings = check_inflation(_bot_ctx(human + dumped), _settings(tmp_path))
 
     assert [f.check_id for f in findings] == ["provenance.template_inflation"]
+
+
+# --- cadence reads when work was written, not when it was last rewritten ----
+
+
+def _dated(index: int, authored, committed) -> Commit:
+    return Commit(
+        sha=f"{index:040x}",
+        author_name="cand",
+        author_email="cand@example.com",
+        authored_at=authored,
+        committer_name="cand",
+        committer_email="cand@example.com",
+        committed_at=committed,
+        parents=(),
+        files=(FileChange("src/app.py", 10, 0),),
+    )
+
+
+#: When the rebase ran, long after the work it rewrote.
+_REBASED = _ORIGIN + timedelta(days=59, hours=12)
+
+
+def test_rebasing_a_branch_is_not_a_scripted_push(tmp_path):
+    """Rebase rewrites every committer date to the moment it ran.
+
+    Twenty commits written over twenty days then rebased once carried twenty
+    identical committer timestamps, and were reported at high severity as a
+    replay of finished work.
+    """
+    spread = [_ORIGIN + timedelta(days=i) for i in range(20)]
+    rebased = [_dated(i, when, _REBASED + timedelta(seconds=i)) for i, when in enumerate(spread)]
+
+    assert check_cadence(_bot_ctx(rebased), _settings(tmp_path)) == []
+
+
+def test_the_same_work_unrebased_is_also_quiet(tmp_path):
+    spread = [_ORIGIN + timedelta(days=i) for i in range(20)]
+    natural = [_dated(i, when, when) for i, when in enumerate(spread)]
+
+    assert check_cadence(_bot_ctx(natural), _settings(tmp_path)) == []
+
+
+def test_a_genuine_replay_is_still_caught(tmp_path):
+    """Both dates bunched: the work itself was never spread out."""
+    dumped = [
+        _dated(i, _REBASED + timedelta(seconds=i), _REBASED + timedelta(seconds=i))
+        for i in range(20)
+    ]
+
+    findings = check_cadence(_bot_ctx(dumped), _settings(tmp_path))
+
+    assert [f.check_id for f in findings] == ["provenance.cadence_burst"]
+
+
+def test_a_batch_of_bot_commits_is_not_the_candidates_rhythm(tmp_path):
+    spread = [_ORIGIN + timedelta(days=i) for i in range(12)]
+    human = [_dated(i, when, when) for i, when in enumerate(spread)]
+    burst_moment = _ORIGIN + timedelta(days=40)
+    bots = [
+        Commit(
+            sha=f"{500 + i:040x}",
+            author_name="dependabot[bot]",
+            author_email="49699333+dependabot[bot]@users.noreply.github.com",
+            authored_at=burst_moment + timedelta(seconds=i),
+            committer_name="dependabot[bot]",
+            committer_email="49699333+dependabot[bot]@users.noreply.github.com",
+            committed_at=burst_moment + timedelta(seconds=i),
+            parents=(),
+            files=(FileChange("package-lock.json", 800, 800),),
+        )
+        for i in range(20)
+    ]
+
+    assert check_cadence(_bot_ctx(human + bots), _settings(tmp_path)) == []
