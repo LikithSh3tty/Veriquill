@@ -1,16 +1,20 @@
 """Security hygiene, via bandit.
 
 Bandit runs as a subprocess so a crash inside it cannot take down the run.
+
+It is pointed at the candidate's own files rather than at the repository
+root. Recursing the root meant it read vendored trees: a repository whose
+single authored file was clean drew four security findings, every one of
+them citing a file inside `node_modules`. Those flowed into the security
+dimension and lowered a real candidate's score for code they did not write.
 """
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
 from pathlib import Path
 
 from veriquill.codeeval.detect import LanguageProfile
+from veriquill.codeeval.runner import python_tool, run_json
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
@@ -48,23 +52,14 @@ def check_security(
     if not profile.python_files:
         return []
 
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "bandit", "-r", str(profile.root), "-f", "json", "-q"],
-            capture_output=True,
-            text=True,
-            timeout=settings.analyser_timeout_seconds,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return []
-
-    try:
-        report = json.loads(result.stdout or "{}")
-    except json.JSONDecodeError:
-        return []
+    reports = run_json(
+        python_tool("bandit", "-f", "json", "-q"),
+        profile.python_files,
+        settings.analyser_timeout_seconds,
+    )
 
     grouped: dict[tuple[str, str], list[dict]] = {}
-    for issue in report.get("results", []):
+    for issue in [i for report in reports for i in (report or {}).get("results", [])]:
         if _is_noise(issue):
             continue
         key = (issue["test_id"], issue["issue_severity"].upper())

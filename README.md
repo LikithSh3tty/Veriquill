@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-660%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-666%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -119,7 +119,13 @@ rather than a convention: a `Finding` with empty evidence cannot be constructed.
 
 ### Languages
 
-Python is analysed with a real syntax tree, through radon, bandit and ruff.
+Python is analysed with a real syntax tree, through radon, bandit and ruff. Those
+two subprocesses are handed the candidate's own files by name rather than pointed at
+the repository, so vendored trees stay out of a metric that describes what the
+candidate wrote. Ruff runs `--isolated`, ignoring any configuration the repository
+ships: a rubric a candidate can edit is not a rubric, and two people with identical
+code should not be scored differently because one held themselves to stricter lint
+settings.
 TypeScript, JavaScript, Go and Java are analysed by reading the source as text:
 complexity counted from decision keywords, test quality from whether a test can fail
 at all, and a short list of security-hygiene patterns.
@@ -225,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 660 Python tests; ui/ carries 76 more
+├── tests/                    # 666 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth

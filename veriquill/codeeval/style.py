@@ -1,13 +1,26 @@
-"""Lint compliance, via ruff."""
+"""Lint compliance, via ruff.
+
+Ruff runs isolated from the repository's own configuration. Without that, a
+candidate who ships a `pyproject.toml` selecting no rules reports zero lint
+violations: eighty-one became none in a repository built to test exactly
+that. A tool whose purpose is noticing a portfolio arranged to look good
+cannot hand the candidate the ruler.
+
+Isolation is also the fairer reading. Two candidates with identical code and
+different lint configurations were being scored differently, and the one
+holding themselves to a stricter standard came off worse for it.
+
+Files are named explicitly rather than the repository root being recursed,
+so vendored and generated trees stay out of a metric that is supposed to
+describe what the candidate wrote.
+"""
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
 from pathlib import Path
 
 from veriquill.codeeval.detect import LanguageProfile
+from veriquill.codeeval.runner import python_tool, run_json
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
@@ -28,29 +41,21 @@ def check_style(
     if not profile.python_files or profile.total_loc == 0:
         return []
 
-    try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "ruff",
-                "check",
-                str(profile.root),
-                "--output-format",
-                "json",
-                "--no-cache",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=settings.analyser_timeout_seconds,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return []
-
-    try:
-        violations = json.loads(result.stdout or "[]")
-    except json.JSONDecodeError:
-        return []
+    reports = run_json(
+        python_tool(
+            "ruff",
+            "check",
+            # Ignore any configuration the repository ships, so every candidate
+            # is measured against the same rules rather than against their own.
+            "--isolated",
+            "--output-format",
+            "json",
+            "--no-cache",
+        ),
+        profile.python_files,
+        settings.analyser_timeout_seconds,
+    )
+    violations = [v for report in reports for v in (report or [])]
 
     if not violations:
         return []

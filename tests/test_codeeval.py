@@ -194,3 +194,100 @@ def test_the_design_reviewer_is_not_called_while_it_is_switched_off(tmp_path):
     findings = run_codeeval(ctx, settings)
 
     assert all(f.check_id != "codeeval.design_review" for f in findings)
+
+
+# --- external analysers see only authored code, under our own rules ---------
+
+
+def test_bandit_does_not_report_vendored_code_against_the_candidate(tmp_path):
+    """`vendored.py` promises every metric excludes acquired code.
+
+    That promise held for every analyser that walked `profile.python_files`
+    and broke for the two that recursed the repository root themselves. A
+    candidate whose only authored file was clean drew four security findings,
+    all of them inside node_modules.
+    """
+    _write(tmp_path, "app.py", "def add(a, b):\n    return a + b\n")
+    _write(
+        tmp_path,
+        "node_modules/pkg/bad.py",
+        "import subprocess\n\n\ndef run():\n"
+        "    eval('1 + 1')\n"
+        "    subprocess.call('ls', shell=True)\n",
+    )
+    profile = profile_repo(tmp_path)
+
+    findings = check_security(_ctx(tmp_path), profile, _settings(tmp_path))
+
+    assert findings == []
+
+
+def test_bandit_still_reports_the_candidates_own_code(tmp_path):
+    _write(
+        tmp_path,
+        "app.py",
+        "import subprocess\n\n\ndef run(cmd):\n    subprocess.call(cmd, shell=True)\n",
+    )
+    profile = profile_repo(tmp_path)
+
+    findings = check_security(_ctx(tmp_path), profile, _settings(tmp_path))
+
+    assert findings
+    assert all("node_modules" not in (f.evidence[0].path or "") for f in findings)
+
+
+def test_a_repository_config_cannot_switch_the_lint_check_off(tmp_path):
+    """Otherwise a portfolio is graded with a ruler the candidate supplied."""
+    from veriquill.codeeval.style import check_style
+
+    dirty = "".join(f"import os{i}\nimport sys{i}\n" for i in range(40))
+    _write(tmp_path, "app.py", dirty + "def f():\n    return 1\n")
+    _write(tmp_path, "pyproject.toml", "[tool.ruff.lint]\nselect = []\n")
+
+    findings = check_style(_ctx(tmp_path), profile_repo(tmp_path), _settings(tmp_path))
+
+    assert findings
+    assert findings[0].check_id == "codeeval.lint_debt"
+
+
+def test_two_candidates_with_the_same_code_get_the_same_lint_verdict(tmp_path):
+    """The fairness half: a stricter config should not cost its author."""
+    from veriquill.codeeval.style import check_style
+
+    dirty = "".join(f"import os{i}\nimport sys{i}\n" for i in range(40)) + "def f():\n    return 1\n"
+
+    strict = tmp_path / "strict"
+    relaxed = tmp_path / "relaxed"
+    for root, config in ((strict, '[tool.ruff.lint]\nselect = ["ALL"]\n'), (relaxed, None)):
+        _write(root, "app.py", dirty)
+        if config:
+            _write(root, "pyproject.toml", config)
+
+    counts = [
+        check_style(_ctx(root), profile_repo(root), _settings(root))[0].rationale.split()[0]
+        for root in (strict, relaxed)
+    ]
+
+    assert counts[0] == counts[1]
+
+
+def test_file_arguments_are_batched_under_the_command_line_limit():
+    from veriquill.codeeval.runner import batches
+
+    paths = [Path(f"/some/fairly/long/directory/name/module_{i:04d}.py") for i in range(2000)]
+
+    groups = list(batches(paths))
+
+    assert len(groups) > 1
+    assert sum(len(g) for g in groups) == 2000
+    for group in groups:
+        assert sum(len(p) + 1 for p in group) <= 24_000
+
+
+def test_a_single_path_over_budget_still_gets_analysed():
+    """Dropping it would silently remove a file from the analysis."""
+    from veriquill.codeeval.runner import batches
+
+    groups = list(batches([Path("x" * 100)], budget=10))
+
+    assert groups == [["x" * 100]]
