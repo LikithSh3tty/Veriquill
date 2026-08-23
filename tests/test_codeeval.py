@@ -364,3 +364,110 @@ def test_a_module_nothing_imports_is_still_reported(tmp_path):
     _library(tmp_path)
 
     assert _orphans(tmp_path) == ["app/b.py", "app/runner.py"]
+
+
+# --- test quality is judged on the tests, not on the library chosen ---------
+
+
+def _tests_verdict(root: Path) -> set[str]:
+    return {f.check_id for f in check_tests(_ctx(root), profile_repo(root), _settings(root))}
+
+
+_APP = "def add(a, b):\n    return a + b\n"
+
+
+def test_a_unittest_suite_is_not_condemned_by_one_smoke_test(tmp_path):
+    """Counting only `assert` statements judged the library, not the tests.
+
+    `self.assertEqual` is a call, so a twenty-case unittest suite with one
+    `assert True` read as "1 of 1 assertions cannot fail" at 0.9 confidence.
+    """
+    _write(tmp_path, "src/app.py", _APP)
+    _write(
+        tmp_path,
+        "tests/test_app.py",
+        "import unittest\nfrom src.app import add\n\n\nclass T(unittest.TestCase):\n"
+        + "".join(f"    def test_{i}(self):\n        self.assertEqual(add({i}, 1), {i + 1})\n" for i in range(20))
+        + "\n    def test_smoke(self):\n        assert True\n",
+    )
+
+    assert "codeeval.trivial_tests" not in _tests_verdict(tmp_path)
+
+
+def test_a_raises_suite_is_not_condemned_by_one_smoke_test(tmp_path):
+    _write(tmp_path, "src/app.py", _APP)
+    _write(
+        tmp_path,
+        "tests/test_app.py",
+        "import pytest\nfrom src.app import add\n\n\n"
+        + "".join(
+            f"def test_r{i}():\n    with pytest.raises(TypeError):\n        add(None, {i})\n\n"
+            for i in range(10)
+        )
+        + "def test_smoke():\n    assert True\n",
+    )
+
+    assert "codeeval.trivial_tests" not in _tests_verdict(tmp_path)
+
+
+def test_a_hollow_unittest_suite_is_now_caught(tmp_path):
+    """It used to be invisible: no assert statements meant nothing to count."""
+    _write(tmp_path, "src/app.py", _APP)
+    _write(
+        tmp_path,
+        "tests/test_app.py",
+        "import unittest\n\n\nclass T(unittest.TestCase):\n"
+        + "".join(f"    def test_{i}(self):\n        self.assertTrue(True)\n" for i in range(8)),
+    )
+
+    assert "codeeval.trivial_tests" in _tests_verdict(tmp_path)
+
+
+def test_comparing_a_literal_with_itself_is_caught(tmp_path):
+    _write(tmp_path, "src/app.py", _APP)
+    _write(
+        tmp_path,
+        "tests/test_app.py",
+        "import unittest\n\n\nclass T(unittest.TestCase):\n"
+        + "".join(f"    def test_{i}(self):\n        self.assertEqual(1, 1)\n" for i in range(8)),
+    )
+
+    assert "codeeval.trivial_tests" in _tests_verdict(tmp_path)
+
+
+def test_a_real_unittest_suite_stays_quiet(tmp_path):
+    _write(tmp_path, "src/app.py", _APP)
+    _write(
+        tmp_path,
+        "tests/test_app.py",
+        "import unittest\nfrom src.app import add\n\n\nclass T(unittest.TestCase):\n"
+        + "".join(f"    def test_{i}(self):\n        self.assertEqual(add({i}, 1), {i + 1})\n" for i in range(8)),
+    )
+
+    assert _tests_verdict(tmp_path) == set()
+
+
+def test_the_two_styles_reach_the_same_verdict_on_the_same_suite(tmp_path):
+    """Half trivial either way, so both should be reported."""
+    pytest_root, unittest_root = tmp_path / "p", tmp_path / "u"
+
+    _write(pytest_root, "src/app.py", _APP)
+    _write(
+        pytest_root,
+        "tests/test_app.py",
+        "from src.app import add\n\n\n"
+        + "".join(f"def test_r{i}():\n    assert add({i}, 1) == {i + 1}\n\n" for i in range(5))
+        + "".join(f"def test_t{i}():\n    assert True\n\n" for i in range(5)),
+    )
+
+    _write(unittest_root, "src/app.py", _APP)
+    _write(
+        unittest_root,
+        "tests/test_app.py",
+        "import unittest\nfrom src.app import add\n\n\nclass T(unittest.TestCase):\n"
+        + "".join(f"    def test_r{i}(self):\n        self.assertEqual(add({i}, 1), {i + 1})\n" for i in range(5))
+        + "".join(f"    def test_t{i}(self):\n        self.assertTrue(True)\n" for i in range(5)),
+    )
+
+    assert _tests_verdict(pytest_root) == _tests_verdict(unittest_root)
+    assert "codeeval.trivial_tests" in _tests_verdict(pytest_root)
