@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
@@ -9,7 +9,10 @@ import {
   fetchCandidates,
   fetchComparison,
   fetchIntakeJob,
+  clearApiKey,
+  readApiKey,
   recordReview,
+  storeApiKey,
 } from "./api";
 
 function respondWith(status: number, body: unknown) {
@@ -233,5 +236,50 @@ describe("intake", () => {
       rubric: "backend",
       candidates: ["alice", "bob"],
     });
+  });
+});
+
+describe("the API key", () => {
+  beforeEach(() => {
+    clearApiKey();
+  });
+
+  it("is not sent when this browser holds none", async () => {
+    const fetchMock = respondWith(200, { candidates: [] });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchCandidates();
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("is sent as a bearer token once stored", async () => {
+    storeApiKey("sk_stored_key");
+    const fetchMock = respondWith(200, { candidates: [] });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchCandidates();
+
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer sk_stored_key");
+  });
+
+  it("marks a 401 so the screen can ask for a key rather than just reporting it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      respondWith(401, { detail: "this server requires an API key" }),
+    );
+
+    await expect(fetchCandidates()).rejects.toMatchObject({
+      status: 401,
+      isUnauthorized: true,
+    });
+  });
+
+  it("trims what was typed, since a pasted key often carries whitespace", () => {
+    storeApiKey("  sk_padded  ");
+
+    expect(readApiKey()).toBe("sk_padded");
   });
 });

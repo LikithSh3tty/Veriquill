@@ -21,13 +21,16 @@ import {
   fetchDossiers,
   fetchIntakeJob,
   fetchRubrics,
+  readApiKey,
   recordReview,
+  ApiError,
   type AuditRow,
   type ComparisonResult,
   type ReviewAction,
   type StoredCandidate,
 } from "./api";
 import { AddCandidate } from "./components/AddCandidate";
+import { ApiKeyGate } from "./components/ApiKeyGate";
 import { BandAxis } from "./components/BandAxis";
 import { CohortPicker } from "./components/CohortPicker";
 import { JobDescription } from "./components/JobDescription";
@@ -48,6 +51,10 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
   const [flags, setFlags] = useState<Record<string, Flag[]>>(dossierFlags);
   const [candidates, setCandidates] = useState<StoredCandidate[]>([]);
   const [rubrics, setRubrics] = useState<{ name: string }[]>([]);
+  // Only true once the server has actually refused a request. Asking for a
+  // key before that would demand one from a server that has none configured.
+  const [refused, setRefused] = useState(false);
+  const [hasKey, setHasKey] = useState(() => readApiKey() !== "");
 
   // Who can be ranked is independent of whether this comparison loads. On a
   // fresh install there is no comparison yet, and intake still has to work.
@@ -81,6 +88,7 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
       setProblem(null);
       setSelected((current) => current ?? comparison.ranked[0]?.handle ?? null);
     } catch (error) {
+      setRefused(error instanceof ApiError && error.isUnauthorized);
       setProblem(error instanceof Error ? error.message : String(error));
     }
   }, [comparisonId]);
@@ -109,14 +117,24 @@ export function App({ comparisonId, dossierFlags = {} }: Props) {
       await approve(comparisonId, actor);
       await load();
     } catch (error) {
+      setRefused(error instanceof ApiError && error.isUnauthorized);
       setProblem(error instanceof Error ? error.message : String(error));
     }
   }
 
   const pending = result?.status !== "reviewed";
 
+  function handleKeySaved() {
+    setHasKey(readApiKey() !== "");
+    setRefused(false);
+    setProblem(null);
+    void load();
+    void loadRoster();
+  }
+
   return (
     <div className="app">
+      <ApiKeyGate refused={refused} hasKey={hasKey} onSaved={handleKeySaved} />
       <header className={`gate ${pending ? "gate--pending" : "gate--reviewed"}`}>
         <div className="gate__state">
           <span className="gate__label">

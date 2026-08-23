@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-585%20Python%20%2B%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-585%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -489,6 +489,11 @@ Keys are compared with a constant-time comparison, so a wrong key takes the same
 reject as a right one. `/health` stays open, because a liveness probe cannot be expected
 to hold credentials.
 
+The dashboard asks for a key only after the server has actually refused a request, so
+a reviewer on an open deployment is never prompted for a credential that does not
+exist. The key is held in that browser's `localStorage` and sent as a bearer token; it
+is never displayed again once stored, and "Forget key" removes it.
+
 **With no keys set, every endpoint is open** and the server says so in a warning at
 startup. That is what a local run needs and what a shared deployment must not have. The
 CLI is unaffected either way: `--actor` there is still whatever the caller types, since
@@ -531,8 +536,6 @@ controls, bias audit, and disclosure pack (M6).
 
 - Depth for Go and Java, on the same read-rather-than-run approach TypeScript uses, so
   fewer portfolios cost their candidate coverage.
-- A key entry in the dashboard, so the review screen works against an API that has keys
-  configured rather than only against an open one.
 - Ground truth from labelled real portfolios. The evaluation harness measures the checks
   against synthetic repositories built to a known shape, which proves a check fires on
   what was constructed and not that its thresholds are right in the world.

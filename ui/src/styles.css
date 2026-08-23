@@ -1182,3 +1182,50 @@ code {
   font-size: var(--text-xs);
   color: var(--ink-soft);
 }
+
+/* The API key strip.
+ *
+ * Sits above the gate rather than inside it: the gate is about this comparison,
+ * and this is about whether the screen can talk to the server at all. It is
+ * absent entirely on an open server, so it must not reserve space. */
+.key-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.key-strip--refused {
+  border-bottom-color: var(--rule-strong);
+  color: var(--ink);
+}
+
+.key-strip label {
+  font-weight: 650;
+}
+
+.key-strip input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+
+/* The whole width, so it reads as a consequence of the field rather than as a
+ * caption sitting beside the button. */
+.key-strip__note {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--text-xs);
+}

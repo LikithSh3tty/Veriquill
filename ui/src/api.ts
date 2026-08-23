@@ -9,6 +9,7 @@
  */
 
 const BASE = "/api";
+const KEY_STORAGE = "veriquill.apiKey";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -18,6 +19,46 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = status;
   }
+
+  /** A 401 is a missing or wrong key, which the screen can act on. */
+  get isUnauthorized(): boolean {
+    return this.status === 401;
+  }
+}
+
+/**
+ * The API key, if this browser has one.
+ *
+ * It lives in localStorage rather than in a cookie, because the server
+ * authenticates a header and a cookie would be sent on every request whether or
+ * not it was wanted. Storage can throw outright in a private window or with
+ * site data blocked, so every access is guarded and a failure reads the same as
+ * having no key: the screen asks for one.
+ */
+export function readApiKey(): string {
+  try {
+    return window.localStorage.getItem(KEY_STORAGE) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function storeApiKey(key: string): void {
+  try {
+    const trimmed = key.trim();
+    if (trimmed) {
+      window.localStorage.setItem(KEY_STORAGE, trimmed);
+    } else {
+      window.localStorage.removeItem(KEY_STORAGE);
+    }
+  } catch {
+    // A browser that will not store it still works for this session, because
+    // the key is read back through the same accessor on every request.
+  }
+}
+
+export function clearApiKey(): void {
+  storeApiKey("");
 }
 
 export type DimensionScore = {
@@ -98,11 +139,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // FormData sets its own multipart boundary. Forcing a JSON content type onto
   // an upload strips that boundary and the server sees a malformed body.
   const isForm = init?.body instanceof FormData;
+
+  const headers: Record<string, string> = {};
+  if (!isForm) {
+    headers["Content-Type"] = "application/json";
+  }
+  // Sent whenever we have one. A server with no keys configured ignores it, so
+  // the same bundle works against an open API and a protected one.
+  const key = readApiKey();
+  if (key) {
+    headers.Authorization = `Bearer ${key}`;
+  }
+  Object.assign(headers, (init?.headers as Record<string, string>) ?? {});
+
   const response = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: isForm
-      ? (init?.headers ?? {})
-      : { "Content-Type": "application/json", ...init?.headers },
+    headers,
   });
 
   let body: unknown = null;
