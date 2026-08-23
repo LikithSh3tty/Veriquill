@@ -329,4 +329,5 @@ def check_go_security(
         noise=NOISE,
         comments=COMMENTS_ONLY,
         confidence=LEXICAL_CONFIDENCE,
+        is_test=_is_test_file,
     )

@@ -18,6 +18,7 @@ points at the wrong line, which is worse than no citation at all.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -191,6 +192,18 @@ def no_tests_finding(
     ]
 
 
+#: One step less severe, for a finding that only ever appears in test code.
+#: LOW does not fall to INFO, because INFO carries no weight at all and the
+#: point is to soften the claim rather than to withdraw it.
+_SOFTENED: dict[Severity, Severity] = {
+    Severity.CRITICAL: Severity.HIGH,
+    Severity.HIGH: Severity.MEDIUM,
+    Severity.MEDIUM: Severity.LOW,
+    Severity.LOW: Severity.LOW,
+    Severity.INFO: Severity.INFO,
+}
+
+
 def security_findings(
     repo: str,
     root: Path,
@@ -201,6 +214,7 @@ def security_findings(
     noise: re.Pattern[str],
     comments: re.Pattern[str],
     confidence: float,
+    is_test: Callable[[Path], bool] = lambda _path: False,
 ) -> list[Finding]:
     """Every security-hygiene pattern, over source that kept its literals.
 
@@ -231,15 +245,29 @@ def security_findings(
         if not hits:
             continue
 
+        # A credential in a fixture is almost always a fixture, and an eval in a
+        # test harness is not the same claim as one in a request handler. When
+        # every occurrence is in test code the finding still stands and still
+        # cites its lines, but it stops carrying the severity of a production
+        # defect. Mixed hits keep full severity, because some of them are real.
+        only_tests = all(is_test(path) for path, _line, _snippet in hits)
+        severity = _SOFTENED[spec.severity] if only_tests else spec.severity
+        aside = (
+            " Every occurrence is in test code, so this is reported one step below "
+            "its usual severity."
+            if only_tests
+            else ""
+        )
+
         findings.append(
             Finding(
                 check_id=f"codeeval.security.{spec.name}",
-                severity=spec.severity,
+                severity=severity,
                 title=f"Security hygiene: {spec.name.replace('_', ' ')}",
                 rationale=(
                     f"{len(hits)} occurrence(s) in {language}: {spec.explanation}. Found "
                     "by reading the source as text, so confirm the context before "
-                    "treating it as settled."
+                    f"treating it as settled.{aside}"
                 ),
                 confidence=confidence,
                 evidence=tuple(

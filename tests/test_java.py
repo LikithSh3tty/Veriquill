@@ -380,3 +380,24 @@ def test_a_java_repository_no_longer_reads_as_unanalysed(tmp_path):
     _ctx, profile, _settings = _repo(tmp_path, {"App.java": "class App {}\n"})
 
     assert coverage_note(profile, "cand/service") is None
+
+
+def test_a_credential_only_in_a_test_file_is_softened(tmp_path):
+    ctx, profile, settings = _repo(
+        tmp_path, {"AppTest.java": 'class AppTest {\n  String password = "hunter2placeholder";\n}\n'}
+    )
+
+    (finding,) = check_java_security(ctx, profile, settings)
+
+    assert finding.severity.value == "medium"
+    assert "test code" in finding.rationale
+
+
+def test_production_code_keeps_full_severity(tmp_path):
+    ctx, profile, settings = _repo(
+        tmp_path, {"App.java": 'class App {\n  String password = "hunter2placeholder";\n}\n'}
+    )
+
+    (finding,) = check_java_security(ctx, profile, settings)
+
+    assert finding.severity.value == "high"

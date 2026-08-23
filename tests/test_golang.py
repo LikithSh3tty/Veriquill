@@ -369,3 +369,49 @@ def test_a_go_portfolio_counts_as_deeply_analysed():
     counts = _analysis_coverage([_Result()], [], repositories_on_account=1)
 
     assert counts["repositories_deep_analysed"] == 1
+
+
+def test_a_credential_only_in_a_test_file_is_softened(tmp_path):
+    """A password in a fixture is almost always a fixture.
+
+    Reported at full severity it is a false accusation, and this tool's own
+    standard is that a false accusation costs a candidate more than a missed
+    flag costs a recruiter. So the finding still stands and still cites its
+    line; it stops carrying the severity of a production defect.
+    """
+    ctx, profile, settings = _repo(
+        tmp_path,
+        {"main_test.go": 'package main\n\nvar password = "hunter2placeholder"\n'},
+    )
+
+    (finding,) = check_go_security(ctx, profile, settings)
+
+    assert finding.check_id == "codeeval.security.hardcoded_secret"
+    assert finding.severity.value == "medium"
+    assert "test code" in finding.rationale
+
+
+def test_the_same_credential_in_production_code_keeps_full_severity(tmp_path):
+    ctx, profile, settings = _repo(
+        tmp_path, {"main.go": 'package main\n\nvar password = "hunter2placeholder"\n'}
+    )
+
+    (finding,) = check_go_security(ctx, profile, settings)
+
+    assert finding.severity.value == "high"
+    assert "test code" not in finding.rationale
+
+
+def test_one_production_hit_among_test_hits_keeps_full_severity(tmp_path):
+    """Softening applies only when there is nothing else it could be."""
+    ctx, profile, settings = _repo(
+        tmp_path,
+        {
+            "main_test.go": 'package main\n\nvar password = "hunter2placeholder"\n',
+            "main.go": 'package main\n\nvar apiKey = "sk_live_abcdefghijkl"\n',
+        },
+    )
+
+    (finding,) = check_go_security(ctx, profile, settings)
+
+    assert finding.severity.value == "high"

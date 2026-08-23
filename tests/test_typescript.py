@@ -331,3 +331,33 @@ def test_a_typescript_portfolio_counts_as_deeply_analysed():
     counts = _analysis_coverage([_Result()], [], repositories_on_account=1)
 
     assert counts["repositories_deep_analysed"] == 1
+
+
+def test_a_credential_only_in_a_test_file_is_softened(tmp_path):
+    ctx, profile, settings = _repo(
+        tmp_path, {"src/app.test.ts": 'const password = "hunter2placeholder";\n'}
+    )
+
+    (finding,) = check_typescript_security(ctx, profile, settings)
+
+    assert finding.severity.value == "medium"
+    assert "test code" in finding.rationale
+
+
+def test_production_code_keeps_full_severity(tmp_path):
+    ctx, profile, settings = _repo(
+        tmp_path, {"src/app.ts": 'const password = "hunter2placeholder";\n'}
+    )
+
+    (finding,) = check_typescript_security(ctx, profile, settings)
+
+    assert finding.severity.value == "high"
+
+
+def test_a_low_severity_finding_does_not_soften_into_nothing(tmp_path):
+    """INFO carries no weight, so softening there would withdraw the claim."""
+    from veriquill.codeeval.lexical import _SOFTENED
+    from veriquill.findings import Severity
+
+    assert _SOFTENED[Severity.LOW] is Severity.LOW
+    assert _SOFTENED[Severity.HIGH] is Severity.MEDIUM

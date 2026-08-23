@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-652%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-660%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -151,6 +151,12 @@ Go's discarded error is the empty `catch`, reported on the same terms. A catch w
 only content is a comment explaining itself does not count, because that is a
 decision, and the check is looking for the absence of one.
 
+A security finding whose every occurrence is in test code is reported one step
+below its usual severity, and says so. A password in a fixture is almost always a
+fixture, and reporting it as a production credential is the kind of false accusation
+this tool is built to avoid. Mixed hits keep full severity, because some of them are
+real.
+
 That buys real evidence where there was none before, and it costs precision. A
 lexical count tracks the cyclomatic number closely on ordinary code and can drift
 on heavily generic or deeply nested expressions, and nothing there can see what
@@ -219,7 +225,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 652 Python tests; ui/ carries 76 more
+├── tests/                    # 660 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
