@@ -10,6 +10,12 @@ import logging
 
 from veriquill.codeeval.complexity import check_complexity
 from veriquill.codeeval.detect import DEEPLY_ANALYSED, LanguageProfile, profile_repo
+from veriquill.codeeval.golang import (
+    check_go_complexity,
+    check_go_error_handling,
+    check_go_security,
+    check_go_tests,
+)
 from veriquill.codeeval.reviewer import DesignReviewer
 from veriquill.codeeval.security import check_security
 from veriquill.codeeval.structure import check_structure
@@ -35,6 +41,10 @@ _ANALYSERS = (
     check_typescript_complexity,
     check_typescript_security,
     check_typescript_tests,
+    check_go_complexity,
+    check_go_security,
+    check_go_tests,
+    check_go_error_handling,
 )
 
 

@@ -125,14 +125,14 @@ def test_absent_tests_are_flagged_once(tmp_path):
 
 def test_unanalysed_languages_are_declared(tmp_path):
     _write(tmp_path, "src/app.py", "x = 1\n")
-    _write(tmp_path, "web/main.go", "package main\n")
+    _write(tmp_path, "core/lib.rs", "fn main() {}\n")
     profile = profile_repo(tmp_path)
 
     note = coverage_note(profile)
 
     assert note is not None
     assert note.severity is Severity.INFO
-    assert "Go" in note.rationale
+    assert "Rust" in note.rationale
 
 
 def test_no_coverage_note_when_everything_is_python(tmp_path):

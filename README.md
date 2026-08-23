@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-585%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-617%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -46,8 +46,8 @@ imported once.
   the commits they are being credited for.
 - **Evaluates code by static analysis.** Cyclomatic complexity, security hygiene,
   lint compliance, dead modules nothing imports, and test quality measured by
-  assertion meaningfulness rather than test count. Python, TypeScript and
-  JavaScript are analysed in depth; other languages are detected, counted, and the
+  assertion meaningfulness rather than test count. Python, TypeScript, JavaScript
+  and Go are analysed in depth; other languages are detected, counted, and the
   output says so explicitly.
 - **Reconciles documents against evidence.** Résumé and LinkedIn claims are extracted,
   matched to repositories, and marked corroborated, uncorroborated, or contradicted,
@@ -120,15 +120,26 @@ rather than a convention: a `Finding` with empty evidence cannot be constructed.
 ### Languages
 
 Python is analysed with a real syntax tree, through radon, bandit and ruff.
-TypeScript and JavaScript are analysed by reading the source as text: complexity
-counted from decision keywords, test quality from whether assertions can fail, and
+TypeScript, JavaScript and Go are analysed by reading the source as text: complexity
+counted from decision keywords, test quality from whether a test can fail at all, and
 a short list of security-hygiene patterns.
 
 **Nothing in that path executes anything from the repository.** The obvious way to
-get this depth is `tsc` and `eslint`, and both run code the candidate wrote: config
-files are JavaScript, plugins are arbitrary packages, and `npm install` runs
-lifecycle scripts. Veriquill clones repositories it has every reason to treat as
-untrusted, so it reads rather than runs.
+get this depth is `tsc`, `eslint`, and `go vet`, and all of them run code the
+candidate wrote: config files are JavaScript, plugins are arbitrary packages,
+`npm install` runs lifecycle scripts, and building Go runs its generators and
+whatever its modules pull in. Veriquill clones repositories it has every reason to
+treat as untrusted, so it reads rather than runs.
+
+Go suits this approach better than most languages. It has no ternary, no
+exceptions, one loop keyword, and gofmt means almost every repository is shaped the
+same way, so a keyword count tracks the real cyclomatic number more closely there.
+Two of its checks are Go-shaped rather than borrowed: a test is found by its
+`_test.go` name and its `*testing.T` signature, and since no assertion library ships
+with the language, a test that never calls `t.Error`, `t.Fatal` or an assertion
+helper cannot fail whatever else it does. Errors discarded into `_` are reported
+separately, and only once there are enough to read as a habit rather than a
+deliberate choice.
 
 That buys real evidence where there was none before, and it costs precision. A
 lexical count tracks the cyclomatic number closely on ordinary code and can drift
@@ -198,7 +209,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 585 Python tests; ui/ carries 76 more
+├── tests/                    # 617 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -534,8 +545,8 @@ controls, bias audit, and disclosure pack (M6).
 
 ## Things I'd add next
 
-- Depth for Go and Java, on the same read-rather-than-run approach TypeScript uses, so
-  fewer portfolios cost their candidate coverage.
+- Depth for Java, on the same read-rather-than-run approach the others use, so fewer
+  portfolios cost their candidate coverage.
 - Ground truth from labelled real portfolios. The evaluation harness measures the checks
   against synthetic repositories built to a known shape, which proves a check fires on
   what was constructed and not that its thresholds are right in the world.

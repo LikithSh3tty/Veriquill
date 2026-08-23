@@ -30,6 +30,7 @@ CODE_QUALITY_CHECKS = frozenset(
         "codeeval.high_complexity",
         "codeeval.lint_debt",
         "codeeval.unreferenced_modules",
+        "codeeval.ignored_errors",
     }
 )
 TEST_CHECKS = frozenset({"codeeval.no_tests", "codeeval.trivial_tests"})
@@ -161,9 +162,9 @@ def _codeeval_dimension(
     if deep == 0:
         return _unmeasured(
             dimension,
-            "no repository was analysed in depth; Python, TypeScript and JavaScript are "
-            "analysed in depth, and no quality judgment is made about other languages "
-            "in either direction",
+            "no repository was analysed in depth; Python, TypeScript, JavaScript and Go "
+            "are analysed in depth, and no quality judgment is made about other "
+            "languages in either direction",
         )
     return _from_penalty(
         dimension,

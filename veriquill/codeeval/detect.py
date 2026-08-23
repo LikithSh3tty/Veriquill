@@ -32,7 +32,7 @@ EXTENSION_LANGUAGES = {
 # Languages an analyser actually inspects, as opposed to counts. Anything
 # outside this set is reported as detected and unread, because silence about a
 # language would read as a clean bill of health.
-DEEPLY_ANALYSED = {"Python", "TypeScript", "JavaScript"}
+DEEPLY_ANALYSED = {"Python", "TypeScript", "JavaScript", "Go"}
 
 #: The languages `typescript_files` collects. They share a grammar closely
 #: enough that one lexical analyser serves both, and a repository mixing them
@@ -45,6 +45,7 @@ class LanguageProfile:
     languages: dict[str, int] = field(default_factory=dict)
     python_files: list[Path] = field(default_factory=list)
     typescript_files: list[Path] = field(default_factory=list)
+    go_files: list[Path] = field(default_factory=list)
     total_loc: int = 0
     root: Path = Path(".")
 
@@ -61,6 +62,7 @@ def profile_repo(root: Path) -> LanguageProfile:
     languages: dict[str, int] = {}
     python_files: list[Path] = []
     typescript_files: list[Path] = []
+    go_files: list[Path] = []
     total_loc = 0
 
     for relative in authored_files(root):
@@ -73,11 +75,14 @@ def profile_repo(root: Path) -> LanguageProfile:
             python_files.append(root / relative)
         elif language in TYPESCRIPT_LANGUAGES:
             typescript_files.append(root / relative)
+        elif language == "Go":
+            go_files.append(root / relative)
 
     return LanguageProfile(
         languages=languages,
         python_files=python_files,
         typescript_files=typescript_files,
+        go_files=go_files,
         total_loc=total_loc,
         root=root,
     )

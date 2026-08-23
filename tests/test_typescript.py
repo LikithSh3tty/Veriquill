@@ -305,13 +305,13 @@ def test_a_language_with_no_analyser_is_still_named_as_unread(tmp_path):
     from veriquill.codeeval.engine import coverage_note
 
     _ctx, profile, _settings = _repo(
-        tmp_path, {"src/app.ts": "export const a = 1;\n", "main.go": "package main\n"}
+        tmp_path, {"src/app.ts": "export const a = 1;\n", "lib.rs": "fn main() {}\n"}
     )
 
     note = coverage_note(profile, "cand/app")
 
     assert note is not None
-    assert "Go" in note.rationale
+    assert "Rust" in note.rationale
     assert "TypeScript" not in note.rationale.split("counted only")[1]
 
 
