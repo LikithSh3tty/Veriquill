@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from tests.fixtures.repobuilder import (
     CommitSpec,
     build_repo,
@@ -11,7 +13,7 @@ from tests.fixtures.repobuilder import (
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import Severity
-from veriquill.github.history import read_history
+from veriquill.github.history import Commit, FileChange, read_history
 from veriquill.provenance import (
     check_bulk_dump,
     check_cadence,
@@ -274,3 +276,121 @@ def test_a_real_fork_is_still_flagged(tmp_path):
     assert findings
     assert findings[0].check_id == "provenance.fork_presented_as_original"
     assert "upstream/core" in findings[0].rationale
+
+
+# --- machines are not co-authors, and not co-suspects ----------------------
+
+
+def _commit(index: int, name: str, email: str, files=()) -> Commit:
+    moment = datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=index)
+    return Commit(
+        sha=f"{index:040x}",
+        author_name=name,
+        author_email=email,
+        authored_at=moment,
+        committer_name=name,
+        committer_email=email,
+        committed_at=moment,
+        parents=(),
+        files=files,
+    )
+
+
+def _bot_ctx(commits) -> RepoContext:
+    return RepoContext(
+        full_name="cand/app",
+        path=Path("."),
+        candidate_handle="cand",
+        identities=frozenset({"cand", "cand@example.com"}),
+        commits=commits,
+        user_id=42,
+    )
+
+
+@pytest.mark.parametrize(
+    "name,email",
+    [
+        ("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com"),
+        ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com"),
+        ("renovate", "renovate@whitesourcesoftware.com"),
+        ("pre-commit-ci[bot]", "66853113+pre-commit-ci[bot]@users.noreply.github.com"),
+    ],
+)
+def test_known_automation_is_recognised(name, email):
+    assert RepoContext.is_bot(_commit(1, name, email)) is True
+
+
+def test_a_person_is_not_mistaken_for_automation():
+    assert RepoContext.is_bot(_commit(1, "Alice Robotham", "alice@example.com")) is False
+
+
+def test_dependabot_does_not_cost_the_candidate_their_authorship(tmp_path):
+    """They wrote every human commit. Sixty bumps reported them at 17%."""
+    human = [_commit(i, "cand", "cand@example.com") for i in range(12)]
+    bots = [
+        _commit(100 + i, "dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com")
+        for i in range(60)
+    ]
+
+    findings = check_contribution(_bot_ctx(human + bots), _settings(tmp_path))
+
+    assert findings == []
+
+
+def test_a_genuinely_absent_author_is_still_reported(tmp_path):
+    """The exclusion must not have swallowed the check."""
+    mine = [_commit(i, "cand", "cand@example.com") for i in range(12)]
+    theirs = [_commit(100 + i, "Someone Else", "else@example.com") for i in range(60)]
+
+    findings = check_contribution(_bot_ctx(mine + theirs), _settings(tmp_path))
+
+    assert [f.check_id for f in findings] == ["provenance.low_contribution"]
+
+
+def test_a_repository_of_only_bot_commits_is_not_judged(tmp_path):
+    bots = [
+        _commit(i, "dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com")
+        for i in range(20)
+    ]
+
+    assert check_contribution(_bot_ctx(bots), _settings(tmp_path)) == []
+
+
+def test_lockfile_churn_is_not_template_inflation(tmp_path):
+    """A bot rewrites the whole lockfile per bump, so sixty bumps count it sixty
+    times. Three thousand lines of real code read as 6% authored."""
+    human = [
+        _commit(i, "cand", "cand@example.com", (FileChange("src/app.py", 100, 0),))
+        for i in range(30)
+    ]
+    bumps = [
+        _commit(
+            100 + i,
+            "dependabot[bot]",
+            "49699333+dependabot[bot]@users.noreply.github.com",
+            (FileChange("package-lock.json", 800, 800),),
+        )
+        for i in range(60)
+    ]
+
+    assert check_inflation(_bot_ctx(human + bumps), _settings(tmp_path)) == []
+
+
+def test_a_candidate_committing_a_vendored_tree_is_still_inflation(tmp_path):
+    human = [
+        _commit(i, "cand", "cand@example.com", (FileChange("src/app.py", 100, 0),))
+        for i in range(30)
+    ]
+    dumped = [
+        _commit(
+            200 + i,
+            "cand",
+            "cand@example.com",
+            (FileChange("node_modules/pkg/index.js", 900, 0),),
+        )
+        for i in range(60)
+    ]
+
+    findings = check_inflation(_bot_ctx(human + dumped), _settings(tmp_path))
+
+    assert [f.check_id for f in findings] == ["provenance.template_inflation"]

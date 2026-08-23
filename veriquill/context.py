@@ -16,6 +16,28 @@ _NOREPLY = re.compile(
     r"^(?:(?P<id>\d+)\+)?(?P<login>[^@+]+)@users\.noreply\.github\.com$"
 )
 
+# GitHub appends [bot] to the identity of every app that commits, which makes
+# the suffix a reliable rule rather than a list to maintain. The names below
+# are the common services that predate the convention or write commits under a
+# plain address.
+_BOT_SUFFIX = re.compile(r"\[bot\]", re.IGNORECASE)
+_BOT_LOGINS = frozenset(
+    {
+        "dependabot",
+        "dependabot-preview",
+        "renovate",
+        "renovate-bot",
+        "greenkeeper",
+        "snyk-bot",
+        "imgbot",
+        "pre-commit-ci",
+        "allcontributors",
+        "github-actions",
+        "semantic-release-bot",
+        "web-flow",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class RepoContext:
@@ -47,6 +69,31 @@ class RepoContext:
             return noreply["id"] == str(self.user_id)
         # An older address carries no id, so the login it names is all there is.
         return noreply["login"] in self.identities
+
+    @staticmethod
+    def is_bot(commit: Commit) -> bool:
+        """Whether a machine wrote this commit.
+
+        Bots belong in neither half of an authorship ratio. Counting them in
+        the denominator meant a candidate who wrote every human commit in
+        their own repository was reported as having authored 17% of it,
+        because Dependabot had opened sixty dependency bumps. That is a high
+        severity finding against the most heavily weighted dimension, earned
+        by keeping dependencies current.
+        """
+        name = commit.author_name.lower()
+        email = commit.author_email.lower()
+        if _BOT_SUFFIX.search(name) or _BOT_SUFFIX.search(email):
+            return True
+
+        noreply = _NOREPLY.match(email)
+        login = noreply["login"].lower() if noreply else name
+        return login in _BOT_LOGINS
+
+    @property
+    def human_commits(self) -> list[Commit]:
+        """Every commit a person wrote, whoever that person was."""
+        return [commit for commit in self.commits if not self.is_bot(commit)]
 
     @property
     def authored_commits(self) -> list[Commit]:

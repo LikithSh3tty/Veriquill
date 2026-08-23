@@ -1,6 +1,13 @@
 """Template and dependency inflation.
 
 Reported repository size counts vendored trees. Authored size does not.
+
+Only commits a person wrote are measured. A dependency bot rewrites a
+lockfile in full on every bump, so sixty bumps count that lockfile sixty
+times: a candidate with three thousand lines of genuine code was reported as
+6% authored, on the strength of having Dependabot switched on. This check
+exists to notice a repository presented as larger than the work in it, and a
+bot maintaining dependencies is not that.
 """
 
 from __future__ import annotations
@@ -16,7 +23,7 @@ def check_inflation(ctx: RepoContext, settings: Settings) -> list[Finding]:
     authored = 0
     vendored_example: str | None = None
 
-    for commit in ctx.commits:
+    for commit in ctx.human_commits:
         for change in commit.files:
             total += change.insertions
             if is_vendored(change.path):
