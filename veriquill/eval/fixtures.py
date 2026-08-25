@@ -20,6 +20,11 @@ class CommitSpec:
     when: datetime
     author_name: str = "Candidate"
     author_email: str = "candidate@example.com"
+    #: When git last wrote the commit, if that differs from when the work was
+    #: authored. Rebase, cherry-pick and squash all set this to the moment
+    #: they ran, which is the shape a rebased branch has and a scripted dump
+    #: does not. Defaults to the author date.
+    committed: datetime | None = None
 
 
 def _run(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
@@ -40,6 +45,7 @@ def build_repo(base: Path, name: str, commits: list[CommitSpec]) -> Path:
             target.write_text(content, encoding="utf-8")
         _run(["git", "add", "-A"], cwd=repo)
         stamp = spec.when.isoformat()
+        written = (spec.committed or spec.when).isoformat()
         env = {
             **os.environ,
             "GIT_AUTHOR_NAME": spec.author_name,
@@ -47,7 +53,7 @@ def build_repo(base: Path, name: str, commits: list[CommitSpec]) -> Path:
             "GIT_AUTHOR_DATE": stamp,
             "GIT_COMMITTER_NAME": spec.author_name,
             "GIT_COMMITTER_EMAIL": spec.author_email,
-            "GIT_COMMITTER_DATE": stamp,
+            "GIT_COMMITTER_DATE": written,
         }
         _run(["git", "commit", "-m", spec.message], cwd=repo, env=env)
 
