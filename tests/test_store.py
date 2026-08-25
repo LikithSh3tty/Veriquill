@@ -122,3 +122,57 @@ def test_comparisons_are_retrievable_by_id_and_carry_their_dossiers(session):
 def test_fetching_an_unknown_comparison_is_refused(session):
     with pytest.raises(StoreError, match="not found"):
         get_comparison(session, 999)
+
+
+# --- reusing a dossier when nothing has moved ------------------------------
+
+
+def _stored(session, handle: str, fingerprint: str | None) -> None:
+    from tests.test_dimensions import make_dossier
+    from veriquill.store import save_dossier
+
+    payload = make_dossier()
+    payload["handle"] = handle
+    payload["refs_fingerprint"] = fingerprint
+    save_dossier(session, payload)
+
+
+def test_a_matching_fingerprint_reuses_the_stored_dossier(session):
+    from veriquill.store import reusable_dossier
+
+    _stored(session, "alice", "abc123")
+
+    assert reusable_dossier(session, "alice", "abc123") is not None
+
+
+def test_a_moved_history_is_re_analysed(session):
+    from veriquill.store import reusable_dossier
+
+    _stored(session, "alice", "abc123")
+
+    assert reusable_dossier(session, "alice", "def456") is None
+
+
+def test_an_unanswerable_fingerprint_is_never_read_as_no_change(session):
+    """A repository gone private must re-analyse, not serve a stale dossier."""
+    from veriquill.store import reusable_dossier
+
+    _stored(session, "alice", "abc123")
+
+    assert reusable_dossier(session, "alice", None) is None
+
+
+def test_a_dossier_stored_before_fingerprints_existed_is_not_reused(session):
+    from veriquill.store import reusable_dossier
+
+    _stored(session, "alice", None)
+
+    assert reusable_dossier(session, "alice", "abc123") is None
+
+
+def test_another_candidate_is_never_served(session):
+    from veriquill.store import reusable_dossier
+
+    _stored(session, "alice", "abc123")
+
+    assert reusable_dossier(session, "bob", "abc123") is None

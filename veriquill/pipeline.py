@@ -26,6 +26,7 @@ from veriquill.github.ingest import fetch_identity, list_repositories
 from veriquill.provenance.duplication import fingerprint_repo
 from veriquill.provenance.engine import run_provenance
 from veriquill.reconcile.evidence import RepoEvidence
+from veriquill.github.refs import account_fingerprint
 from veriquill.relevance import select_repositories
 from veriquill.vendored import is_vendored
 
@@ -107,6 +108,12 @@ class RunSummary:
     repositories_on_account: int = 0
     skipped: list[dict[str, Any]] = field(default_factory=list)
     selection: list[dict[str, Any]] = field(default_factory=list)
+    #: What the selected repositories' histories currently are, taken before
+    #: anything was cloned. A later run that fingerprints the same is looking
+    #: at the same histories and the same tool, so it can reuse the dossier.
+    #: None means the question could not be answered, which is never read as
+    #: an answer of no change.
+    refs_fingerprint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -179,6 +186,44 @@ async def _analyse_repo(
     return result
 
 
+async def account_refs_fingerprint(
+    handle: str,
+    settings: Settings,
+    client: GitHubClient | None = None,
+    job_description: str = "",
+) -> str | None:
+    """What this candidate's selected repositories currently hold, without cloning.
+
+    Two REST calls and one ls-remote per repository, against the minutes a
+    full analysis costs. A caller holding a dossier stamped with the same
+    value is holding one built from the same histories by the same code.
+
+    None means the question could not be answered, and an unanswered question
+    is never an answer of no change.
+    """
+    settings.ensure_dirs()
+    active = client or GitHubClient(settings)
+
+    async with active as connected:
+        repos = await list_repositories(connected, handle)
+        selected, _skipped = select_repositories(
+            repos,
+            job_description,
+            limit=settings.relevance_limit,
+            threshold=settings.relevance_threshold,
+        )
+
+    return await account_fingerprint(
+        {
+            str(row["repository"].get("full_name") or row["repository"].get("name")): str(
+                row["repository"]["clone_url"]
+            )
+            for row in selected
+            if row["repository"].get("clone_url")
+        },
+        settings.clone_timeout_seconds,
+    )
+
 async def analyse_candidate(
     handle: str,
     settings: Settings,
@@ -208,6 +253,18 @@ async def analyse_candidate(
         summary.selection = selected
         summary.skipped = skipped
         repos = [row["repository"] for row in selected]
+
+        # Asked before anything is cloned, so a caller holding a dossier with
+        # this fingerprint can skip the clones entirely. One ls-remote per
+        # repository against minutes of cloning and history walking.
+        summary.refs_fingerprint = await account_fingerprint(
+            {
+                str(repo.get("full_name") or repo.get("name")): str(repo["clone_url"])
+                for repo in repos
+                if repo.get("clone_url")
+            },
+            settings.clone_timeout_seconds,
+        )
 
         semaphore = asyncio.Semaphore(settings.max_clone_concurrency)
         summary.repositories = list(
@@ -260,4 +317,7 @@ async def build_candidate_dossier(
     )
     report["claims_examined"] = len(claim_set.claims)
     report["claim_errors"] = claim_set.errors
+    # What the histories were when this was built. A later run that reads the
+    # same fingerprint is looking at the same work through the same code.
+    report["refs_fingerprint"] = summary.refs_fingerprint
     return report

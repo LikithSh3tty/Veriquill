@@ -63,7 +63,11 @@ from veriquill.intake import (
     stage_upload,
 )
 from veriquill.jobspec import derive_rubric, read_job_description
-from veriquill.pipeline import analyse_candidate, build_candidate_dossier
+from veriquill.pipeline import (
+    account_refs_fingerprint,
+    analyse_candidate,
+    build_candidate_dossier,
+)
 from veriquill.review import ReviewError, audit_log, effective_result, export_payload, record_action
 from veriquill.review import approve as approve_comparison
 from veriquill.rubric import Rubric, RubricError
@@ -75,6 +79,7 @@ from veriquill.store import (
     list_candidates,
     list_rubrics,
     load_run,
+    reusable_dossier,
     save_dossier,
     save_rubric,
     save_run,
@@ -390,7 +395,20 @@ async def _run_intake(
     settings = get_settings()
     _JOBS.start(job_id)
     try:
-        report = await build_candidate_dossier(
+        # Ask what the repositories currently hold before cloning any of
+        # them. A stored dossier stamped with the same fingerprint was built
+        # from the same histories by the same code, so rebuilding it would
+        # spend minutes to reach the identical artifact. Documents are the
+        # exception: new ones mean new claims to reconcile.
+        reused: dict[str, Any] | None = None
+        if resume is None and linkedin is None:
+            fingerprint = await account_refs_fingerprint(
+                handle, settings, job_description=job_description
+            )
+            with _session() as session:
+                reused = reusable_dossier(session, handle, fingerprint)
+
+        report = reused or await build_candidate_dossier(
             handle,
             settings,
             resume=resume,

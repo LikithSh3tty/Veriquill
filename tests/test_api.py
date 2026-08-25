@@ -420,3 +420,74 @@ def test_a_posting_supplied_at_intake_reaches_the_analysis(tmp_path, monkeypatch
     assert seen["job_description"] == "Python and OWASP."
 
     get_settings.cache_clear()
+
+
+def test_an_unchanged_candidate_is_not_re_analysed(tmp_path, monkeypatch):
+    """Re-cloning to rebuild an identical dossier is minutes for no new fact."""
+    from veriquill.api import main as api_main
+
+    client = _seeded_client(tmp_path, monkeypatch)
+
+    monkeypatch.setattr(
+        api_main, "account_refs_fingerprint", _fake_fingerprint("same-as-stored")
+    )
+
+    async def refuse(*_args, **_kwargs):
+        raise AssertionError("the analysis ran despite an unchanged fingerprint")
+
+    monkeypatch.setattr(api_main, "build_candidate_dossier", refuse)
+
+    # The seeded dossier is stamped with the fingerprint the remote now reports.
+    with api_main._session() as session:
+        from tests.test_dimensions import make_dossier
+        from veriquill.store import save_dossier
+
+        payload = make_dossier()
+        payload["handle"] = "alpha"
+        payload["refs_fingerprint"] = "same-as-stored"
+        save_dossier(session, payload)
+
+    response = client.post("/candidates", data={"handle": "alpha"})
+    assert response.status_code == 202
+
+    job_id = response.json()["job"]["id"]
+    assert client.get(f"/candidates/jobs/{job_id}").json()["job"]["status"] == "done"
+
+
+def test_a_moved_history_is_analysed_again(tmp_path, monkeypatch):
+    from veriquill.api import main as api_main
+
+    client = _seeded_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(api_main, "account_refs_fingerprint", _fake_fingerprint("moved"))
+
+    ran = {"count": 0}
+
+    async def capture(*_args, **_kwargs):
+        from tests.test_dimensions import make_dossier
+
+        ran["count"] += 1
+        payload = make_dossier()
+        payload["handle"] = "alpha"
+        return payload
+
+    monkeypatch.setattr(api_main, "build_candidate_dossier", capture)
+
+    with api_main._session() as session:
+        from tests.test_dimensions import make_dossier
+        from veriquill.store import save_dossier
+
+        payload = make_dossier()
+        payload["handle"] = "alpha"
+        payload["refs_fingerprint"] = "the-old-one"
+        save_dossier(session, payload)
+
+    client.post("/candidates", data={"handle": "alpha"})
+
+    assert ran["count"] == 1
+
+
+def _fake_fingerprint(value):
+    async def _fingerprint(*_args, **_kwargs):
+        return value
+
+    return _fingerprint

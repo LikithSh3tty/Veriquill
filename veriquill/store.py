@@ -397,3 +397,29 @@ def load_run(session: Session, run_id: str) -> dict[str, Any]:
     if record is None:
         raise StoreError(f"run {run_id!r} not found")
     return dict(record.summary or {})
+
+
+def reusable_dossier(session: Session, handle: str, fingerprint: str | None) -> dict[str, Any] | None:
+    """The stored dossier for this candidate, if it describes the same work.
+
+    `fingerprint` covers every ref of every repository that would be read, plus
+    the tool's own version, so a match means the histories and the code that
+    read them are both unchanged. Re-cloning to rebuild an identical dossier is
+    minutes of work for no new information.
+
+    None `fingerprint` means the remotes could not be asked, and an unanswered
+    question is never treated as an answer of no change: the caller re-analyses.
+    """
+    if not fingerprint:
+        return None
+
+    record = session.scalars(
+        select(DossierRecord)
+        .where(DossierRecord.candidate_handle == handle)
+        .order_by(DossierRecord.id.desc())
+    ).first()
+    if record is None:
+        return None
+
+    stored = (record.payload or {}).get("refs_fingerprint")
+    return dict(record.payload) if stored and stored == fingerprint else None
