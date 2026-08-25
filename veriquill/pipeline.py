@@ -33,7 +33,15 @@ logger = logging.getLogger(__name__)
 
 
 def build_evidence(ctx: RepoContext, findings: list[Finding]) -> RepoEvidence:
-    """Flatten what the engines learned into the shape reconciliation compares."""
+    """Flatten what the engines learned into the shape reconciliation compares.
+
+    Authorship share is measured against commits a person wrote. Counting
+    automation in the denominator sent that share below the threshold
+    reconciliation treats as support, and a candidate whose own project had
+    two hundred Dependabot bumps had their resume claim to have built it
+    returned as contradicted: the strongest thing this tool can say about a
+    person, earned by keeping dependencies current.
+    """
     authored = ctx.authored_commits
     authored_loc = sum(
         change.insertions
@@ -49,7 +57,7 @@ def build_evidence(ctx: RepoContext, findings: list[Finding]) -> RepoEvidence:
         topics=tuple(ctx.metadata.get("topics") or ()),
         languages=dict(profile.languages),
         authored_commits=len(authored),
-        total_commits=len(ctx.commits),
+        total_commits=len(ctx.human_commits),
         authored_loc=authored_loc,
         check_ids=tuple(f.check_id for f in findings),
     )

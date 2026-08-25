@@ -139,3 +139,58 @@ async def test_a_failed_repository_carries_no_evidence(tmp_path, monkeypatch):
     summary = await analyse_candidate("cand", settings, client=FakeClient())
 
     assert summary.repositories[0].evidence is None
+
+
+def test_authorship_share_is_measured_against_people(tmp_path):
+    """Automation in the denominator can contradict a true resume claim.
+
+    Reconciliation treats a repository as supporting a claim only above a
+    minimum authorship share. With two hundred Dependabot bumps counted, a
+    candidate's own project fell under it and their claim to have built the
+    thing came back contradicted.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from veriquill.context import RepoContext
+    from veriquill.github.history import Commit, FileChange
+    from veriquill.pipeline import build_evidence
+
+    origin = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def made_by(index: int, name: str, email: str) -> Commit:
+        moment = origin + timedelta(hours=index)
+        return Commit(
+            sha=f"{index:040x}",
+            author_name=name,
+            author_email=email,
+            authored_at=moment,
+            committer_name=name,
+            committer_email=email,
+            committed_at=moment,
+            parents=(),
+            files=(FileChange("src/app.py", 40, 0),),
+        )
+
+    mine = [made_by(i, "cand", "cand@example.com") for i in range(12)]
+    bots = [
+        made_by(100 + i, "dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com")
+        for i in range(200)
+    ]
+
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    ctx = RepoContext(
+        full_name="cand/orchard",
+        path=root,
+        candidate_handle="cand",
+        identities=frozenset({"cand", "cand@example.com"}),
+        commits=mine + bots,
+        user_id=42,
+    )
+
+    evidence = build_evidence(ctx, [])
+
+    assert evidence.total_commits == 12
+    assert evidence.authorship_share == 1.0

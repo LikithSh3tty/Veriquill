@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-694%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-695%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 694 Python tests; ui/ carries 76 more
+├── tests/                    # 695 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
