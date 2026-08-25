@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-714%20Python%20%2B%2094%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-731%20Python%20%2B%2094%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 714 Python tests; ui/ carries 76 more
+├── tests/                    # 731 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -313,6 +313,23 @@ veriquill dossier bob --resume ./bob-cv.pdf --linkedin ./bob-export.csv
 ```
 
 Either route produces the same stored dossier.
+
+### Re-analysing a candidate
+
+Adding a candidate whose work has not moved does not clone anything. Before any
+clone, Veriquill asks each selected repository what it currently holds with `git
+ls-remote` and hashes every ref name and sha together with the tool's own version.
+A stored dossier stamped with the same value was built from the same histories by
+the same code, so rebuilding it would spend minutes to reach an identical artifact.
+
+The rule is sound against exactly what this tool exists to notice: a commit sha
+covers its whole ancestry, so a force-push, a rebase, a squash or an amended root
+commit all change a sha, and a deleted branch changes the ref set.
+
+**A question that could not be answered is never read as an answer of no change.** A
+repository gone private, or a remote that is down, re-analyses rather than serving a
+stale dossier as though it were fresh. Attaching a résumé or a LinkedIn export always
+re-analyses too, because new documents mean new claims to reconcile.
 
 ### Comparing them
 
@@ -582,9 +599,6 @@ controls, bias audit, and disclosure pack (M6).
 - Ground truth from labelled real portfolios. The evaluation harness measures the checks
   against synthetic repositories built to a known shape, which proves a check fires on
   what was constructed and not that its thresholds are right in the world.
-- Incremental re-analysis: re-read only what changed since the last dossier instead of
-  re-cloning a portfolio. It needs a cache-invalidation rule first, since a rewritten
-  history is exactly what the provenance engine exists to notice.
 
 ## Limits of this tool
 
