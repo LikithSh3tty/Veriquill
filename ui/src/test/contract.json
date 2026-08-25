@@ -31,6 +31,7 @@
     "disclaimer": "This ordering is advisory and is not a hiring decision. Scores are confidence-qualified: a wide band reflects how little evidence was available, not a judgment about the candidate.",
     "ranked": [
       {
+        "candidate_responses": [],
         "drivers": [
           "authenticity +0.00 against the cohort median",
           "breadth +0.00 against the cohort median",

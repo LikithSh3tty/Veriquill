@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-739%20Python%20%2B%2094%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-749%20Python%20%2B%2094%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 739 Python tests; ui/ carries 76 more
+├── tests/                    # 749 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -330,6 +330,30 @@ commit all change a sha, and a deleted branch changes the ref set.
 repository gone private, or a remote that is down, re-analyses rather than serving a
 stale dossier as though it were fresh. Attaching a résumé or a LinkedIn export always
 re-analyses too, because new documents mean new claims to reconcile.
+
+### What the candidate says
+
+Every other voice here belongs to someone deciding: the engines that raise a flag,
+the recruiter who dismisses one, the approver who signs the comparison off. The
+person being judged had nothing to say about an assessment that could cost them a
+job.
+
+```bash
+curl -X POST localhost:8000/comparisons/1/responses \
+  -H 'content-type: application/json' \
+  -d '{"candidate": "alice", "flag_id": "3f2a91c40b7e",
+       "text": "Employer-owned import, developed over a year and pushed once.",
+       "recorded_by": "you@example.com"}'
+```
+
+It is append-only, like the review log, and it never moves a score. It sits beside
+the finding exactly as a dismissal does, and weighing it stays the reviewer's job.
+
+**Recording one reopens the approval gate.** A comparison approved before hearing it
+was approved on a different set of facts, and an explanation nobody has to read
+before exporting is decoration. `recorded_by` names whoever took it down, because a
+candidate has no account here: the words are theirs, the transcription is not, and
+the export should not blur the two.
 
 ### Comparing them
 

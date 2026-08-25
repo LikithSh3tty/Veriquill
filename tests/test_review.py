@@ -326,3 +326,132 @@ def test_the_export_carries_the_audit_log_and_says_it_is_not_a_decision(session)
 
     assert payload["audit_log"]
     assert "decision" in payload["disclaimer"].lower()
+
+
+# --- the candidate gets a voice in the record -------------------------------
+
+
+def test_a_candidate_response_is_recorded_beside_the_finding(session):
+    comparison = seed(session, ("alice",))
+    from veriquill.review import effective_result, record_response
+
+    record_response(
+        session,
+        comparison,
+        candidate="alice",
+        text="That import is employer-owned; I have the письмо if needed.",
+        recorded_by="reviewer@example.com",
+    )
+
+    result = effective_result(session, comparison)
+    row = next(r for r in result["ranked"] if r["handle"] == "alice")
+
+    assert row["candidate_responses"]
+    assert "employer-owned" in row["candidate_responses"][0]["text"]
+
+
+def test_recording_a_response_never_moves_the_score(session):
+    """The machine result stands. Weighing the answer is the reviewer's job."""
+    comparison = seed(session, ("alice",))
+    from veriquill.review import effective_result, record_response
+
+    before = {
+        r["handle"]: r["score"]["score"] for r in effective_result(session, comparison)["ranked"]
+    }
+
+    record_response(
+        session,
+        comparison,
+        candidate="alice",
+        text="Developed locally over a year, imported once.",
+        recorded_by="reviewer@example.com",
+    )
+
+    after = {
+        r["handle"]: r["score"]["score"] for r in effective_result(session, comparison)["ranked"]
+    }
+    assert after == before
+
+
+def test_a_response_reopens_the_gate(session):
+    """An explanation nobody has to read before exporting is decoration."""
+    comparison = seed(session, ("alice",))
+    from veriquill.review import approve, record_response
+
+    approve(session, comparison, actor="reviewer@example.com")
+    assert comparison.status == "reviewed"
+
+    record_response(
+        session,
+        comparison,
+        candidate="alice",
+        text="Here is what actually happened.",
+        recorded_by="reviewer@example.com",
+    )
+
+    assert comparison.status == "pending_review"
+    assert comparison.revision == 1
+
+
+def test_an_empty_response_is_refused(session):
+    comparison = seed(session, ("alice",))
+    from veriquill.review import ReviewError, record_response
+
+    with pytest.raises(ReviewError, match="nothing in it"):
+        record_response(
+            session, comparison, candidate="alice", text="   ", recorded_by="reviewer"
+        )
+
+
+def test_a_response_needs_someone_who_took_it_down(session):
+    comparison = seed(session, ("alice",))
+    from veriquill.review import ReviewError, record_response
+
+    with pytest.raises(ReviewError, match="who took this down"):
+        record_response(
+            session, comparison, candidate="alice", text="An explanation.", recorded_by=" "
+        )
+
+
+def test_a_response_may_answer_one_flag(session):
+    comparison = seed(session, ("alice",))
+    from veriquill.review import record_response, responses_by_handle
+
+    record_response(
+        session,
+        comparison,
+        candidate="alice",
+        text="Employer-owned import.",
+        recorded_by="reviewer@example.com",
+        flag_id="abc",
+    )
+
+    assert responses_by_handle(session, comparison)["alice"][0]["flag_id"] == "abc"
+
+
+def test_a_response_to_a_flag_that_does_not_exist_is_refused(session):
+    comparison = seed(session, ("alice",))
+    from veriquill.review import ReviewError, record_response
+
+    with pytest.raises(ReviewError, match="no flag"):
+        record_response(
+            session,
+            comparison,
+            candidate="alice",
+            text="About that.",
+            recorded_by="reviewer@example.com",
+            flag_id="not-a-flag",
+        )
+
+
+def test_responses_are_kept_in_the_order_they_were_heard(session):
+    comparison = seed(session, ("alice",))
+    from veriquill.review import record_response, responses_by_handle
+
+    for text in ("First account.", "Second, after thinking."):
+        record_response(
+            session, comparison, candidate="alice", text=text, recorded_by="reviewer"
+        )
+
+    heard = responses_by_handle(session, comparison)["alice"]
+    assert [entry["text"] for entry in heard] == ["First account.", "Second, after thinking."]

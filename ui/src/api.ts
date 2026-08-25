@@ -100,6 +100,23 @@ export type RankedRow = {
   machine_score?: CandidateScore | null;
   human_band?: string | null;
   override_reason?: string | null;
+  /** What the candidate said, recorded beside the finding rather than in it. */
+  candidate_responses?: CandidateResponse[];
+};
+
+/**
+ * The candidate's own account of a finding.
+ *
+ * `recorded_by` is whoever took it down, because a candidate has no account
+ * here. The words are theirs; the transcription is not, and the screen should
+ * not let those blur.
+ */
+export type CandidateResponse = {
+  flag_id: string | null;
+  text: string;
+  recorded_by: string;
+  revision: number;
+  created_at: string;
 };
 
 export type UnrankedRow = {

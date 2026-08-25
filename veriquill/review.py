@@ -17,7 +17,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from veriquill.models import ComparisonEntry, ComparisonRecord, ReviewAction
+from veriquill.models import (
+    CandidateResponse,
+    ComparisonEntry,
+    ComparisonRecord,
+    ReviewAction,
+)
 from veriquill.rank.compare import compare
 from veriquill.store import load_rubric
 
@@ -201,12 +206,20 @@ def effective_result(session: Session, comparison: ComparisonRecord) -> dict[str
     overrides = _overrides(session, comparison)
     machine = {entry.candidate_handle: entry.machine_score for entry in comparison.entries}
 
+    heard = responses_by_handle(session, comparison)
+
     for row in result["ranked"]:
         handle = row["handle"]
         row["machine_score"] = machine.get(handle)
         override = overrides.get(handle)
         row["human_band"] = override["band"] if override else None
         row["override_reason"] = override["reason"] if override else None
+        # Beside the machine result and the recruiter's overrides, never
+        # folded into either. Weighing it is the reviewer's job.
+        row["candidate_responses"] = heard.get(handle, [])
+
+    for row in result.get("unranked") or []:
+        row["candidate_responses"] = heard.get(row["handle"], [])
 
     result["status"] = comparison.status
     result["revision"] = comparison.revision
@@ -245,3 +258,84 @@ def export_payload(session: Session, comparison: ComparisonRecord) -> dict[str, 
     payload["audit_log"] = audit_log(session, comparison)
     payload["disclaimer"] = DISCLAIMER
     return payload
+
+
+def record_response(
+    session: Session,
+    comparison: ComparisonRecord,
+    *,
+    candidate: str,
+    text: str,
+    recorded_by: str,
+    flag_id: str | None = None,
+) -> CandidateResponse:
+    """Put the candidate's own account of a finding on the record.
+
+    **It reopens the gate.** A rebuttal is information the approver did not
+    have, and a comparison approved before hearing it was approved on a
+    different set of facts. That is the whole point of recording it: an
+    explanation nobody has to read before exporting is decoration.
+
+    It never touches a score. The machine result stands, the recruiter's
+    overrides stand, and this sits beside both, exactly as a dismissal does.
+    Weighing it is the reviewer's job and always was.
+    """
+    text = (text or "").strip()
+    if not text:
+        raise ReviewError("a response with nothing in it is not a response")
+
+    recorded_by = (recorded_by or "").strip()
+    if not recorded_by:
+        raise ReviewError(
+            "say who took this down; a candidate has no account here, so the "
+            "transcription needs an owner even though the words do not"
+        )
+
+    entry = _entry(comparison, candidate)
+    if flag_id is not None and flag_id not in _flag_ids(entry):
+        raise ReviewError(
+            f"{candidate} has no flag {flag_id!r}; answer a flag by the flag_id "
+            "shown in the dossier, or leave it out to answer the assessment"
+        )
+
+    if comparison.status == "reviewed":
+        comparison.revision += 1
+        comparison.status = "pending_review"
+        comparison.approved_at = None
+
+    record = CandidateResponse(
+        comparison_id=comparison.id,
+        candidate_handle=candidate,
+        flag_id=flag_id,
+        text=text,
+        recorded_by=recorded_by,
+        revision=comparison.revision,
+        created_at=_now(),
+    )
+    session.add(record)
+    session.flush()
+    return record
+
+
+def responses_by_handle(
+    session: Session, comparison: ComparisonRecord
+) -> dict[str, list[dict[str, Any]]]:
+    """Every response this comparison has heard, in the order it heard them."""
+    records = session.scalars(
+        select(CandidateResponse)
+        .where(CandidateResponse.comparison_id == comparison.id)
+        .order_by(CandidateResponse.id)
+    ).all()
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        grouped.setdefault(record.candidate_handle, []).append(
+            {
+                "flag_id": record.flag_id,
+                "text": record.text,
+                "recorded_by": record.recorded_by,
+                "revision": record.revision,
+                "created_at": record.created_at.isoformat(),
+            }
+        )
+    return grouped

@@ -491,3 +491,43 @@ def _fake_fingerprint(value):
         return value
 
     return _fingerprint
+
+
+def test_a_candidate_response_can_be_recorded_over_http(tmp_path, monkeypatch):
+    """The person being judged was the only party with nothing to say."""
+    client, comparison_id = _seeded_comparison(tmp_path, monkeypatch)
+
+    recorded = client.post(
+        f"/comparisons/{comparison_id}/responses",
+        json={
+            "candidate": "alpha",
+            "text": "That import is employer-owned.",
+            "recorded_by": "reviewer@example.com",
+            "flag_id": "abc",
+        },
+    )
+
+    assert recorded.status_code == 200
+
+    result = client.get(f"/comparisons/{comparison_id}").json()["result"]
+    row = next(r for r in result["ranked"] if r["handle"] == "alpha")
+    assert "employer-owned" in row["candidate_responses"][0]["text"]
+
+
+def test_a_response_reopens_the_export_gate_over_http(tmp_path, monkeypatch):
+    client, comparison_id = _seeded_comparison(tmp_path, monkeypatch)
+    client.post(
+        f"/comparisons/{comparison_id}/approve", json={"actor": "reviewer@example.com"}
+    )
+    assert client.get(f"/comparisons/{comparison_id}/export").status_code == 200
+
+    client.post(
+        f"/comparisons/{comparison_id}/responses",
+        json={
+            "candidate": "alpha",
+            "text": "Developed locally, imported once.",
+            "recorded_by": "reviewer@example.com",
+        },
+    )
+
+    assert client.get(f"/comparisons/{comparison_id}/export").status_code == 409

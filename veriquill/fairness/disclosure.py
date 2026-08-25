@@ -50,6 +50,11 @@ HUMAN_OVERSIGHT: tuple[str, ...] = (
     "reopens the gate and requires a fresh approval.",
     "A reviewer can dismiss any individual flag or override a verdict band, and "
     "must give a reason for each; the machine result is never edited.",
+    (
+        "A candidate may put their own account of any finding on the record. It "
+        "is stored beside the finding, never folded into a score, and recording "
+        "one reopens the approval gate so it must be read before any export."
+    ),
     "Every review action is appended to an audit log that is never updated or "
     "deleted, so replaying it reconstructs any state the comparison has held.",
 )

@@ -257,3 +257,35 @@ class RateWindow(Base):
     client: Mapped[str] = mapped_column(String(64), primary_key=True)
     window_start: Mapped[int] = mapped_column(Integer, primary_key=True)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CandidateResponse(Base):
+    """What the person being judged said about a finding, on the record.
+
+    Every other voice in this system belongs to someone deciding: the engines
+    that raise a flag, the recruiter who dismisses one, the approver who signs
+    the comparison off. The candidate was the only party with nothing to say
+    about an assessment that could cost them a job.
+
+    Append-only, like the review log, and for the same reason: a rebuttal that
+    can be edited afterwards is not a record of what was said. It never changes
+    a score. A bulk-dump flag has an innocent explanation more often than not,
+    and this is where that explanation lives beside the flag rather than in a
+    recruiter's memory.
+
+    `recorded_by` is the person who entered it, because a candidate has no
+    account here. The response is the candidate's; the transcription is not, and
+    the export should not pretend otherwise.
+    """
+
+    __tablename__ = "candidate_responses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    comparison_id: Mapped[int] = mapped_column(ForeignKey("comparisons.id"), index=True)
+    candidate_handle: Mapped[str] = mapped_column(String(120), index=True)
+    #: The flag this answers, or NULL when it answers the assessment as a whole.
+    flag_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    text: Mapped[str] = mapped_column(Text)
+    recorded_by: Mapped[str] = mapped_column(String(120))
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

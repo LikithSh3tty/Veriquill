@@ -69,7 +69,14 @@ from veriquill.pipeline import (
     analyse_candidate,
     build_candidate_dossier,
 )
-from veriquill.review import ReviewError, audit_log, effective_result, export_payload, record_action
+from veriquill.review import (
+    ReviewError,
+    audit_log,
+    effective_result,
+    export_payload,
+    record_action,
+    record_response,
+)
 from veriquill.review import approve as approve_comparison
 from veriquill.rubric import Rubric, RubricError
 from veriquill.store import (
@@ -218,6 +225,15 @@ class ReviewRequest(BaseModel):
     target: str | None = None
 
 
+class ResponseRequest(BaseModel):
+    candidate: str
+    text: str
+    # Who took it down. A candidate has no account here, so the
+    # transcription needs an owner even though the words do not.
+    recorded_by: str = ""
+    flag_id: str | None = None
+
+
 class ApprovalRequest(BaseModel):
     actor: str = ""
 
@@ -317,6 +333,36 @@ def review_comparison(
                 candidate=request.candidate,
                 target=request.target,
                 reason=request.reason,
+            )
+        except ReviewError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"comparison_id": comparison.id, "status": comparison.status}
+
+
+@router.post("/comparisons/{comparison_id}/responses")
+def record_candidate_response(
+    comparison_id: int, request: ResponseRequest, http_request: Request
+) -> dict[str, Any]:
+    """Record what the candidate says about a finding.
+
+    It reopens the gate. A comparison approved before hearing this was
+    approved on a different set of facts, and an explanation nobody has to
+    read before exporting is decoration.
+    """
+    recorded_by = actor_for(_identity(http_request), request.recorded_by)
+    with _session() as session:
+        try:
+            comparison = get_comparison(session, comparison_id)
+        except StoreError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        try:
+            record_response(
+                session,
+                comparison,
+                candidate=request.candidate,
+                text=request.text,
+                recorded_by=recorded_by,
+                flag_id=request.flag_id,
             )
         except ReviewError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
