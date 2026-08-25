@@ -1,0 +1,266 @@
+{
+  "audit": [
+    {
+      "action": "flag_dismiss",
+      "actor": "reviewer@example.com",
+      "candidate": "alpha",
+      "created_at": "<timestamp>",
+      "reason": "employer-owned import",
+      "revision": 0,
+      "target": "abc"
+    },
+    {
+      "action": "approve",
+      "actor": "reviewer@example.com",
+      "candidate": null,
+      "created_at": "<timestamp>",
+      "reason": "approved revision 0",
+      "revision": 0,
+      "target": null
+    }
+  ],
+  "candidates": [
+    {
+      "dossier_id": 1,
+      "flags": 1,
+      "handle": "alpha",
+      "stored_at": "<timestamp>"
+    }
+  ],
+  "comparison": {
+    "disclaimer": "This ordering is advisory and is not a hiring decision. Scores are confidence-qualified: a wide band reflects how little evidence was available, not a judgment about the candidate.",
+    "ranked": [
+      {
+        "drivers": [
+          "authenticity +0.00 against the cohort median",
+          "breadth +0.00 against the cohort median",
+          "code_quality +0.00 against the cohort median"
+        ],
+        "handle": "alpha",
+        "human_band": null,
+        "machine_score": {
+          "band": [
+            0.59,
+            0.69
+          ],
+          "bar_breaches": [],
+          "confidence": "high",
+          "coverage": 1.0,
+          "dimensions": [
+            {
+              "basis": "1 flag(s) across 1 repository analysed",
+              "coverage": 1.0,
+              "dimension": "authenticity",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "provenance.bulk_dump: line 4",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 0.0
+            },
+            {
+              "basis": "static analysis found no complexity, lint, or dead-module problem",
+              "coverage": 1.0,
+              "dimension": "code_quality",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "static analysis found no complexity, lint, or dead-module problem",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 1.0
+            },
+            {
+              "basis": "no claim document was supplied, so nothing could be reconciled",
+              "coverage": 0.0,
+              "dimension": "claim_corroboration",
+              "evidence": [],
+              "score": null
+            },
+            {
+              "basis": "tests were present and their assertions were not trivial",
+              "coverage": 1.0,
+              "dimension": "test_quality",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "tests were present and their assertions were not trivial",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 1.0
+            },
+            {
+              "basis": "no security-hygiene finding was raised",
+              "coverage": 1.0,
+              "dimension": "security",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "no security-hygiene finding was raised",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 1.0
+            },
+            {
+              "basis": "1 repository hold authored code; 5 or more scores full marks",
+              "coverage": 1.0,
+              "dimension": "breadth",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "analysed repository",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 0.2
+            }
+          ],
+          "handle": "alpha",
+          "is_decision": false,
+          "score": 0.64,
+          "unmeasured": [
+            "claim_corroboration"
+          ],
+          "width": 0.05
+        },
+        "override_reason": null,
+        "rank": 1,
+        "score": {
+          "band": [
+            0.79,
+            0.89
+          ],
+          "bar_breaches": [],
+          "confidence": "high",
+          "coverage": 1.0,
+          "dimensions": [
+            {
+              "basis": "commit history read for 1 repository, no authenticity flag raised",
+              "coverage": 1.0,
+              "dimension": "authenticity",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "commit history read for 1 repository, no authenticity flag raised",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 1.0
+            },
+            {
+              "basis": "static analysis found no complexity, lint, or dead-module problem",
+              "coverage": 1.0,
+              "dimension": "code_quality",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "static analysis found no complexity, lint, or dead-module problem",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 1.0
+            },
+            {
+              "basis": "no claim document was supplied, so nothing could be reconciled",
+              "coverage": 0.0,
+              "dimension": "claim_corroboration",
+              "evidence": [],
+              "score": null
+            },
+            {
+              "basis": "tests were present and their assertions were not trivial",
+              "coverage": 1.0,
+              "dimension": "test_quality",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "tests were present and their assertions were not trivial",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 1.0
+            },
+            {
+              "basis": "no security-hygiene finding was raised",
+              "coverage": 1.0,
+              "dimension": "security",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "no security-hygiene finding was raised",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 1.0
+            },
+            {
+              "basis": "1 repository hold authored code; 5 or more scores full marks",
+              "coverage": 1.0,
+              "dimension": "breadth",
+              "evidence": [
+                {
+                  "commit_sha": null,
+                  "detail": "analysed repository",
+                  "line": null,
+                  "path": null,
+                  "repo": "octocat/api"
+                }
+              ],
+              "score": 0.2
+            }
+          ],
+          "handle": "alpha",
+          "is_decision": false,
+          "score": 0.84,
+          "unmeasured": [
+            "claim_corroboration"
+          ],
+          "width": 0.05
+        },
+        "separated_weakly": false,
+        "separation_note": "",
+        "tie_group": 0
+      }
+    ],
+    "revision": 0,
+    "rubric": {
+      "custom_dimensions": {},
+      "minimum_bars": {},
+      "name": "backend",
+      "version": 1,
+      "weights": {
+        "authenticity": 0.16666666666666666,
+        "breadth": 0.16666666666666666,
+        "claim_corroboration": 0.16666666666666666,
+        "code_quality": 0.16666666666666666,
+        "security": 0.16666666666666666,
+        "test_quality": 0.16666666666666666
+      }
+    },
+    "status": "reviewed",
+    "unranked": []
+  }
+}
