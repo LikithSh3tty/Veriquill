@@ -237,3 +237,23 @@ class RunSummaryRecord(Base):
     handle: Mapped[str] = mapped_column(String(120), index=True)
     summary: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class RateWindow(Base):
+    """One client's request count inside one fixed window, shared by every worker.
+
+    The in-process limiter is a floor: it protects one process from one caller,
+    and several workers multiply the budget by however many there are. That was
+    documented rather than fixed, which is fine for a limiter guarding cheap
+    reads and not fine for the endpoints that clone a portfolio.
+
+    A row per (bucket, client, window) rather than a row per request, so the
+    table stays small and the check is one upsert.
+    """
+
+    __tablename__ = "rate_windows"
+
+    bucket: Mapped[str] = mapped_column(String(32), primary_key=True)
+    client: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_start: Mapped[int] = mapped_column(Integer, primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)

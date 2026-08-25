@@ -225,3 +225,132 @@ def test_the_same_cap_is_enforced_under_the_api_prefix():
     )
 
     assert response.status_code == 413
+
+
+# --- the analysis budget is shared across workers ---------------------------
+
+
+def _shared(tmp_path, limit=2, window=60):
+    """A limiter over its own database, as two workers would share one."""
+    from contextlib import contextmanager
+
+    from veriquill.api.limits import SharedWindowLimiter
+    from veriquill.db import init_db, make_engine, make_session_factory
+
+    engine = make_engine(tmp_path / "v.sqlite")
+    init_db(engine)
+    sessions = make_session_factory(engine)
+
+    @contextmanager
+    def factory():
+        with sessions() as session:
+            yield session
+            session.commit()
+
+    return SharedWindowLimiter(
+        bucket="analysis", limit=limit, window_seconds=window, session_factory=factory
+    ), factory
+
+
+def test_a_caller_within_the_shared_budget_is_allowed(tmp_path):
+    limiter, _ = _shared(tmp_path, limit=3)
+
+    for _ in range(3):
+        limiter.check("1.2.3.4", now=1000.0)
+
+
+def test_a_caller_over_the_shared_budget_is_refused(tmp_path):
+    limiter, _ = _shared(tmp_path, limit=2)
+    limiter.check("1.2.3.4", now=1000.0)
+    limiter.check("1.2.3.4", now=1000.0)
+
+    with pytest.raises(LimitExceeded) as exc:
+        limiter.check("1.2.3.4", now=1000.0)
+
+    assert exc.value.status_code == 429
+
+
+def test_two_workers_share_one_budget(tmp_path):
+    """The whole point. In-process limiters gave a caller one budget each."""
+    from contextlib import contextmanager
+
+    from veriquill.api.limits import SharedWindowLimiter
+    from veriquill.db import init_db, make_engine, make_session_factory
+
+    engine = make_engine(tmp_path / "v.sqlite")
+    init_db(engine)
+    sessions = make_session_factory(engine)
+
+    @contextmanager
+    def factory():
+        with sessions() as session:
+            yield session
+            session.commit()
+
+    def worker():
+        return SharedWindowLimiter(
+            bucket="analysis", limit=2, window_seconds=60, session_factory=factory
+        )
+
+    worker().check("1.2.3.4", now=1000.0)
+    worker().check("1.2.3.4", now=1000.0)
+
+    with pytest.raises(LimitExceeded):
+        worker().check("1.2.3.4", now=1000.0)
+
+
+def test_the_shared_budget_refills_once_the_window_passes(tmp_path):
+    limiter, _ = _shared(tmp_path, limit=1, window=60)
+    limiter.check("1.2.3.4", now=1000.0)  # window 960
+
+    with pytest.raises(LimitExceeded):
+        limiter.check("1.2.3.4", now=1010.0)  # same window
+
+    limiter.check("1.2.3.4", now=1090.0)  # window 1080
+
+
+def test_a_fixed_window_lets_a_burst_cross_its_boundary(tmp_path):
+    """Stated rather than discovered.
+
+    A fixed window resets on the hour rather than sliding, so a caller can
+    spend a full budget at the end of one and another at the start of the
+    next. That is the standard cost of counting in one row instead of
+    storing every request, and it bounds a caller at twice the budget rather
+    than at the number of workers, which is what this replaced.
+    """
+    limiter, _ = _shared(tmp_path, limit=2, window=60)
+
+    limiter.check("1.2.3.4", now=1019.0)
+    limiter.check("1.2.3.4", now=1019.5)
+    limiter.check("1.2.3.4", now=1021.0)
+    limiter.check("1.2.3.4", now=1021.5)
+
+    with pytest.raises(LimitExceeded):
+        limiter.check("1.2.3.4", now=1022.0)
+
+
+def test_one_caller_cannot_spend_anothers_shared_budget(tmp_path):
+    limiter, _ = _shared(tmp_path, limit=1)
+    limiter.check("1.2.3.4", now=1000.0)
+
+    limiter.check("5.6.7.8", now=1000.0)
+
+
+def test_a_zero_shared_limit_disables_it(tmp_path):
+    limiter, _ = _shared(tmp_path, limit=0)
+
+    for _ in range(50):
+        limiter.check("1.2.3.4", now=1000.0)
+
+
+def test_old_windows_do_not_accumulate(tmp_path):
+    """A row per active caller, not a row per request ever made."""
+    from veriquill.models import RateWindow
+
+    limiter, factory = _shared(tmp_path, limit=100, window=60)
+
+    for minute in range(20):
+        limiter.check("1.2.3.4", now=1000.0 + minute * 60)
+
+    with factory() as session:
+        assert session.query(RateWindow).count() == 1

@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi import HTTPException, Request, UploadFile
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -177,3 +180,72 @@ def enforce(limiter: FixedWindowLimiter, request: Request) -> None:
         limiter.check(client_key(request))
     except LimitExceeded as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@dataclass
+class SharedWindowLimiter:
+    """A budget every worker shares, counted in the database.
+
+    `FixedWindowLimiter` protects one process from one caller. Two workers give
+    a caller twice the budget, four give four times, and nothing in the response
+    says so. That is an acceptable floor in front of cheap reads and not
+    acceptable in front of the endpoints that clone a portfolio: those are the
+    ones a budget exists to bound.
+
+    One upsert per request, which is nothing against an analysis measured in
+    minutes. Cheap endpoints keep the in-process limiter, because a database
+    round trip on every poll would cost more than the budget is worth.
+
+    The window is fixed rather than sliding: it counts into one row per window
+    instead of storing every request, so a caller can spend a full budget at the
+    end of one window and another at the start of the next. That bounds them at
+    twice the budget, which is a smaller and fixed overrun than the number of
+    workers this replaced.
+    """
+
+    bucket: str
+    limit: int
+    window_seconds: int
+    session_factory: Callable[[], AbstractContextManager[Any]]
+
+    def check(self, key: str, now: float | None = None) -> None:
+        """Record a request, or raise if this caller is over the shared budget."""
+        if self.limit <= 0:
+            return
+
+        moment = time.time() if now is None else now
+        window_start = int(moment // self.window_seconds) * self.window_seconds
+
+        with self.session_factory() as session:
+            count = _bump(session, self.bucket, key, window_start)
+
+        if count > self.limit:
+            retry_after = max(1, int(window_start + self.window_seconds - moment) + 1)
+            raise LimitExceeded(429, f"too many requests; retry in {retry_after}s")
+
+    def reset(self) -> None:
+        """Clear every window. For tests, which must not inherit each other's."""
+        from veriquill.models import RateWindow
+
+        with self.session_factory() as session:
+            session.query(RateWindow).delete()
+
+
+def _bump(session: Any, bucket: str, client: str, window_start: int) -> int:
+    """Increment this window's count and return it, creating the row if needed.
+
+    Rows from windows already past are deleted on the way through, so the table
+    holds roughly one row per active caller rather than growing forever.
+    """
+    from veriquill.models import RateWindow
+
+    session.query(RateWindow).filter(RateWindow.window_start < window_start).delete()
+
+    row = session.get(RateWindow, (bucket, client, window_start))
+    if row is None:
+        row = RateWindow(bucket=bucket, client=client, window_start=window_start, count=0)
+        session.add(row)
+
+    row.count += 1
+    session.flush()
+    return row.count

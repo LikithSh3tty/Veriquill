@@ -50,6 +50,7 @@ from veriquill.api.limits import (
     BodySizeLimitMiddleware,
     FixedWindowLimiter,
     LimitExceeded,
+    SharedWindowLimiter,
     enforce,
     read_capped,
 )
@@ -117,9 +118,16 @@ _reads = FixedWindowLimiter(
     limit=_limit_settings.api_rate_limit,
     window_seconds=_limit_settings.api_rate_limit_window_seconds,
 )
-_analyses = FixedWindowLimiter(
+# Shared across workers, unlike the reads budget. Two workers used to give a
+# caller twice the analysis budget with nothing in the response saying so,
+# and these are the endpoints that clone a portfolio. One upsert per request
+# is nothing against an analysis measured in minutes; putting the same round
+# trip on every job poll would cost more than that budget is worth.
+_analyses = SharedWindowLimiter(
+    bucket="analysis",
     limit=_limit_settings.api_analysis_rate_limit,
     window_seconds=_limit_settings.api_rate_limit_window_seconds,
+    session_factory=lambda: _session(),
 )
 
 def _authenticate(request: Request) -> Identity:

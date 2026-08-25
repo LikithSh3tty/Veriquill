@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-731%20Python%20%2B%2094%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-739%20Python%20%2B%2094%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 731 Python tests; ui/ carries 76 more
+├── tests/                    # 739 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -576,7 +576,14 @@ off for a deployment that already has its own gateway.
 | `VERIQUILL_API_ANALYSIS_RATE_LIMIT` | 10/min | endpoints that start a clone, per client |
 | `VERIQUILL_MAX_JOB_DESCRIPTION_CHARS` | 20,000 | a posting handed to the rubric deriver |
 
-The budget is per process and keyed on the socket address, not on a forwarded header,
+The analysis budget is shared across workers, counted in the database, because those
+are the endpoints that clone a portfolio and a per-process budget multiplies by however
+many workers are running. It uses a fixed window rather than a sliding one, so a caller
+can spend a full budget either side of a boundary: twice the budget, rather than once
+per worker. The reads budget stays per process, since a database round trip on every
+job poll would cost more than that budget is worth.
+
+Both are keyed on the socket address, not on a forwarded header,
 a header is caller-supplied and would let anyone spend anyone else's budget. Behind a
 trusted proxy that means the proxy, which is a real limitation and the reason this is a
 floor rather than a defence.
