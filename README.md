@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-712%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-714%20Python%20%2B%2094%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 712 Python tests; ui/ carries 76 more
+├── tests/                    # 714 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -284,8 +284,13 @@ cd ui && npm install && npm run dev
 `http://localhost:5173/review.html?comparison=1`. The dev server proxies `/api` to
 port 8000. Note that Vite binds IPv6 `localhost`, not `127.0.0.1`.
 
+A contract fixture written from the running API keeps the two halves honest: the
+Python suite regenerates `ui/src/test/contract.json` and fails when the committed
+copy is stale, and the interface renders that exact payload. A renamed field fails
+on both sides instead of emptying a panel.
+
 ```bash
-npm test        # component + API-client tests
+npm test        # component, API-client and contract tests
 npm run build   # production bundle
 npm run lint    # typecheck
 ```
@@ -580,7 +585,6 @@ controls, bias audit, and disclosure pack (M6).
 - Incremental re-analysis: re-read only what changed since the last dossier instead of
   re-cloning a portfolio. It needs a cache-invalidation rule first, since a rewritten
   history is exactly what the provenance engine exists to notice.
-- End-to-end tests through the dashboard, not just component and API-client tests.
 
 ## Limits of this tool
 
