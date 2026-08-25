@@ -137,6 +137,10 @@ def test_a_group_with_one_member_is_reported_as_too_small_to_audit():
     )
 
     assert any("small" in note.lower() for note in report["notes"])
+    # And no verdict, because a rate over one candidate is 0% or 100% whatever
+    # the tool did. A pass there is false comfort and a failure a false alarm.
+    assert report["passes_four_fifths"] is None
+    assert report["impact_ratio"] is not None
 
 
 def test_the_audit_never_infers_a_group_it_was_not_given():
@@ -153,3 +157,31 @@ def test_the_audit_states_that_it_is_not_a_legal_certification():
 
     assert "not" in report["disclaimer"].lower()
     assert "audit" in report["disclaimer"].lower()
+
+
+def test_a_real_cohort_still_gets_a_verdict():
+    """Withholding on thin data must not withhold on adequate data."""
+    dossiers = [dossier_for(f"a{i}") for i in range(4)] + [dossier_for(f"b{i}") for i in range(4)]
+    groups = {**{f"a{i}": "A" for i in range(4)}, **{f"b{i}": "B" for i in range(4)}}
+
+    report = audit_comparison(compare(dossiers, RUBRIC), groups=groups, top_k=4)
+
+    assert report["passes_four_fifths"] is not None
+
+
+def test_a_one_member_group_cannot_raise_a_false_alarm_either():
+    """The withheld verdict cuts both ways: no false pass, no false failure."""
+    result = compare([dossier_for("a1"), dossier_for("a2"), flagged("b1")], RUBRIC)
+
+    report = audit_comparison(result, groups={"a1": "A", "a2": "A", "b1": "B"}, top_k=2)
+
+    assert report["passes_four_fifths"] is None
+
+
+def test_the_rates_are_still_reported_when_the_verdict_is_withheld():
+    """Describing the cohort is useful even when measuring it is not."""
+    result = compare([dossier_for("a1"), dossier_for("a2"), flagged("b1")], RUBRIC)
+
+    report = audit_comparison(result, groups={"a1": "A", "a2": "A", "b1": "B"}, top_k=1)
+
+    assert {row["group"] for row in report["selection"]} == {"A", "B"}

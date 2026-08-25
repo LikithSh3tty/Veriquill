@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-703%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-706%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 703 Python tests; ui/ carries 76 more
+├── tests/                    # 706 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -447,7 +447,10 @@ veriquill fairness-report 1 --groups groups.json --top-k 3 --format markdown -o 
 Veriquill never infers a protected attribute, so selection-rate arithmetic needs group
 labels supplied from your own records (`{"alice": "A", "bob": "B"}`). Given them, it
 reports selection rate per group, the impact ratio against the four-fifths rule, and
-per-check flag rates, because an ordering can look even while the reasons behind it do
+per-check flag rates. **No four-fifths verdict is reported when any group holds fewer
+than two candidates**: a rate over one person is 0% or 100% whatever the tool did, so a
+pass would be false comfort and a failure a false alarm. The rates are still shown,
+because describing a cohort is useful even when measuring it is not, because an ordering can look even while the reasons behind it do
 not. Without labels it still audits what needs no protected data at all: how evenly
 evidence could be gathered across the cohort. That is the most likely route to disparate
 impact in this design, since a portfolio in a language Veriquill does not analyse in

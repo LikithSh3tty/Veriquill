@@ -173,15 +173,27 @@ def audit_comparison(
     if len(selection) >= 2:
         rates = [row["selection_rate"] for row in selection]
         ratio = impact_ratio(min(rates), max(rates))
-        passes = ratio is not None and ratio >= FOUR_FIFTHS
 
-        for row in selection:
-            if row["considered"] < MIN_GROUP_SIZE:
-                notes.append(
-                    f"Group {row['group']!r} has {row['considered']} candidate(s): too "
-                    "small for a rate to mean anything. Read it as a description, not "
-                    "a measurement."
-                )
+        # A group of one produces a selection rate of exactly 0% or 100%, and
+        # an impact ratio built from those says nothing about anybody. The
+        # rate is still reported, because describing the cohort is useful,
+        # but the verdict is withheld: the same distinction this tool draws
+        # everywhere between not knowing and being satisfied.
+        undersized = [
+            row["group"] for row in selection if row["considered"] < MIN_GROUP_SIZE
+        ]
+        if undersized:
+            notes.append(
+                f"Group(s) {', '.join(repr(g) for g in undersized)} hold fewer than "
+                f"{MIN_GROUP_SIZE} candidates: too small for a four-fifths verdict, so "
+                "none is reported. "
+                "A rate over one candidate is 0% or 100% whatever the tool did, and "
+                "a pass built on that would be false comfort while a failure would "
+                "be a false alarm. The rates below describe the cohort; they do not "
+                "measure it."
+            )
+        else:
+            passes = ratio is not None and ratio >= FOUR_FIFTHS
     elif labels:
         notes.append(
             "Only one group was labelled, so no comparison between groups is possible."
