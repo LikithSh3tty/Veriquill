@@ -23,14 +23,23 @@ def check_fork_origin(ctx: RepoContext, settings: Settings) -> list[Finding]:
     if not is_fork:
         return []
 
-    earliest = ctx.commits[0]
+    # Bots out of the denominator, as everywhere else a ratio decides
+    # something here. A formatter or a docs generator committing to a fork
+    # writes lines that are neither the upstream author's nor the
+    # candidate's, and counting them only ever pushes the candidate's share
+    # down toward the threshold.
+    humans = ctx.human_commits
+    if not humans:
+        return []
+
+    earliest = humans[0]
 
     own = ctx.authored_commits
     own_insertions = sum(
         f.insertions for c in own for f in c.files if not is_vendored(f.path)
     )
     total_insertions = sum(
-        f.insertions for c in ctx.commits for f in c.files if not is_vendored(f.path)
+        f.insertions for c in humans for f in c.files if not is_vendored(f.path)
     )
     if total_insertions < settings.fork_min_total_loc:
         return []

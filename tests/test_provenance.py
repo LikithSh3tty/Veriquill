@@ -473,3 +473,88 @@ def test_a_batch_of_bot_commits_is_not_the_candidates_rhythm(tmp_path):
     ]
 
     assert check_cadence(_bot_ctx(human + bots), _settings(tmp_path)) == []
+
+
+def test_a_formatter_bot_does_not_push_a_fork_over_the_threshold(tmp_path):
+    """Every other provenance ratio excludes bots; this one is the last.
+
+    A formatter or docs generator committing to a fork writes lines that are
+    neither the upstream author's nor the candidate's, and counting them only
+    ever pushes the candidate's share down toward the threshold.
+    """
+    upstream = [
+        Commit(
+            sha=f"{i:040x}",
+            author_name="Upstream",
+            author_email="upstream@example.com",
+            authored_at=_ORIGIN + timedelta(days=i),
+            committer_name="Upstream",
+            committer_email="upstream@example.com",
+            committed_at=_ORIGIN + timedelta(days=i),
+            parents=(),
+            files=(FileChange("src/core.py", 100, 0),),
+        )
+        for i in range(10)
+    ]
+    mine = [
+        _dated(100 + i, _ORIGIN + timedelta(days=20 + i), _ORIGIN + timedelta(days=20 + i))
+        for i in range(60)
+    ]
+    formatter = [
+        Commit(
+            sha=f"{500 + i:040x}",
+            author_name="pre-commit-ci[bot]",
+            author_email="66853113+pre-commit-ci[bot]@users.noreply.github.com",
+            authored_at=_ORIGIN + timedelta(days=90 + i),
+            committer_name="pre-commit-ci[bot]",
+            committer_email="66853113+pre-commit-ci[bot]@users.noreply.github.com",
+            committed_at=_ORIGIN + timedelta(days=90 + i),
+            parents=(),
+            files=(FileChange("src/formatted.py", 400, 400),),
+        )
+        for i in range(20)
+    ]
+
+    ctx = RepoContext(
+        full_name="cand/forked",
+        path=Path("."),
+        candidate_handle="cand",
+        identities=frozenset({"cand", "cand@example.com"}),
+        commits=upstream + mine + formatter,
+        metadata={"fork": True, "parent": {"full_name": "upstream/original"}},
+        user_id=42,
+    )
+
+    assert check_fork_origin(ctx, _settings(tmp_path)) == []
+
+
+def test_a_fork_the_candidate_barely_touched_is_still_reported(tmp_path):
+    upstream = [
+        Commit(
+            sha=f"{i:040x}",
+            author_name="Upstream",
+            author_email="upstream@example.com",
+            authored_at=_ORIGIN + timedelta(days=i),
+            committer_name="Upstream",
+            committer_email="upstream@example.com",
+            committed_at=_ORIGIN + timedelta(days=i),
+            parents=(),
+            files=(FileChange("src/core.py", 500, 0),),
+        )
+        for i in range(10)
+    ]
+    mine = [_dated(100, _ORIGIN + timedelta(days=30), _ORIGIN + timedelta(days=30))]
+
+    ctx = RepoContext(
+        full_name="cand/forked",
+        path=Path("."),
+        candidate_handle="cand",
+        identities=frozenset({"cand", "cand@example.com"}),
+        commits=upstream + mine,
+        metadata={"fork": True, "parent": {"full_name": "upstream/original"}},
+        user_id=42,
+    )
+
+    findings = check_fork_origin(ctx, _settings(tmp_path))
+
+    assert [f.check_id for f in findings] == ["provenance.fork_presented_as_original"]
