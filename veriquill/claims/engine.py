@@ -8,7 +8,7 @@ as a claim and never as a failure of the whole run.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,7 @@ from veriquill.claims.models import Claim, ClaimKind
 from veriquill.claims.refine import ClaimRefiner
 from veriquill.claims.resume import parse_resume
 from veriquill.config import Settings
-from veriquill.fairness.signals import redact_document
+from veriquill.fairness.signals import redact_document, redact_prose, scan_lines
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,24 @@ def _dedupe(claims: list[Claim]) -> list[Claim]:
     return kept
 
 
+def _claim_texts(claims: list[Claim]) -> list[str]:
+    """Every string a claim carries, so a scan sees what a reader would."""
+    return [f"{claim.text} {claim.source.excerpt}" for claim in claims]
+
+
+def _redacted(claim: Claim) -> Claim:
+    """The same claim with every protected value removed.
+
+    Both the text and the quoted excerpt, because the excerpt is what the
+    review screen shows and what the dossier stores. Redacting one and not
+    the other would move the leak rather than close it.
+    """
+    return replace(
+        claim,
+        text=redact_prose(claim.text),
+        source=replace(claim.source, excerpt=redact_prose(claim.source.excerpt)),
+    )
+
 def collect_claims(
     settings: Settings,
     resume: str | Path | None = None,
@@ -125,7 +143,23 @@ def collect_claims(
 
     if linkedin is not None:
         try:
-            collected.extend(load_linkedin_export(linkedin))
+            # Redacted like the resume, and for the same reason. A LinkedIn
+            # export carries a Birth Date column outright, and a position
+            # summary is free text in which people state nationality,
+            # marital status and religion. Without this the claim, its
+            # quoted excerpt, the stored dossier and the reviewer's screen
+            # all carried whatever the export held.
+            entries = load_linkedin_export(linkedin)
+            result.redactions.extend(
+                {
+                    "category": match.category,
+                    "line": match.line,
+                    "document": match.document,
+                    "note": match.describe(),
+                }
+                for match in scan_lines(_claim_texts(entries), "linkedin")
+            )
+            collected.extend(_redacted(claim) for claim in entries)
         except Exception as exc:
             result.errors.append(f"linkedin: {exc}")
 

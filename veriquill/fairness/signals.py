@@ -133,6 +133,32 @@ def redact_text(text: str) -> str:
     return cleaned
 
 
+#: Sentence boundary, keeping the terminator with the sentence it ends.
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+
+
+def redact_prose(text: str) -> str:
+    """Redact free text, one sentence at a time.
+
+    A labelled field runs to the end of its line, which is right for a resume
+    where each field has a line of its own. Prose puts several sentences on
+    one line, so the same rule ate whatever followed: a summary reading
+    'Date of Birth: 14 March 1996. Built the billing service.' lost the claim
+    along with the date. Sentences are redacted separately, so a protected
+    value takes only its own sentence with it.
+    """
+    parts = _SENTENCE.split(text)
+    if len(parts) == 1:
+        return redact_text(text)
+
+    # Rebuilt with the original separators, so spacing survives.
+    separators = _SENTENCE.findall(text)
+    cleaned = [redact_text(part) for part in parts]
+    out = cleaned[0]
+    for separator, part in zip(separators, cleaned[1:], strict=False):
+        out += separator + part
+    return out
+
 def redact_document(document):
     """Redact a document's sensitive values, preserving every line number.
 

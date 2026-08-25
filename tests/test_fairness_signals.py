@@ -109,3 +109,40 @@ def test_several_categories_on_one_line_are_all_redacted():
 def test_scanning_is_case_insensitive():
     assert scan_lines(["gender: female"])
     assert scan_lines(["GENDER: FEMALE"])
+
+
+# --- prose is redacted a sentence at a time ---------------------------------
+
+
+def test_a_labelled_field_still_takes_its_whole_line_on_a_resume():
+    """One field per line is the resume shape, and the value runs to the end."""
+    from veriquill.fairness.signals import redact_text
+
+    assert "1996" not in redact_text("Date of Birth: 14 March 1996")
+
+
+def test_prose_loses_only_the_sentence_that_carried_the_value():
+    """The greedy line rule ate whatever followed, claim and all."""
+    from veriquill.fairness.signals import redact_prose
+
+    cleaned = redact_prose(
+        "Nationality: Indian. Date of Birth: 14 March 1996. Built the billing service."
+    )
+
+    assert "Indian" not in cleaned
+    assert "1996" not in cleaned
+    assert "Built the billing service." in cleaned
+
+
+def test_prose_with_one_sentence_behaves_like_a_line():
+    from veriquill.fairness.signals import redact_prose
+
+    assert "Indian" not in redact_prose("Nationality: Indian")
+
+
+def test_prose_with_nothing_protected_is_returned_unchanged():
+    from veriquill.fairness.signals import redact_prose
+
+    original = "Built the billing service. Led the migration. Shipped it in March."
+
+    assert redact_prose(original) == original

@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-695%20Python%20%2B%2088%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-703%20Python%20%2B%2088%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 695 Python tests; ui/ carries 76 more
+├── tests/                    # 703 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -429,8 +429,10 @@ an hour to analyse that way.
 Veriquill treats itself as an automated employment decision tool and ships the artifacts
 that position demands.
 
-**Protected attributes are removed at the door.** Résumés in many countries state date of
-birth, marital status, nationality, religion, caste, blood group, or attach a photograph.
+**Protected attributes are removed at the door, on both document paths.** Résumés in
+many countries state date of birth, marital status, nationality, religion, caste, blood
+group, or attach a photograph. A LinkedIn export carries a birth date column outright,
+and its position summaries are free text in which people write the rest.
 Those fields are detected by label and redacted before parsing, before any model call,
 and before anything is stored, so they never reach a claim, a score, a log, or the
 recruiter's screen. The dossier records that a field was present and removed, never what

@@ -181,3 +181,92 @@ def test_a_clean_resume_records_no_redactions(tmp_path):
     result = collect_claims(_settings(tmp_path), resume=resume)
 
     assert result.redactions == []
+
+
+# --- redaction covers both document paths, not just the resume -------------
+
+
+_PROTECTED_VALUES = ("indian", "1996", "14 march", "married", "hindu")
+
+
+def _values_surviving(claims) -> list[str]:
+    """The values themselves. Labels are kept deliberately, so they are not leaks."""
+    found: list[str] = []
+    for claim in claims:
+        blob = f"{claim.text} {claim.source.excerpt}".lower()
+        found += [value for value in _PROTECTED_VALUES if value in blob]
+    return found
+
+
+def _linkedin_export(tmp_path):
+    """A positions export whose free-text summary states protected attributes.
+
+    LinkedIn's own export carries a Birth Date column, and a position summary
+    is free text in which people write these outright.
+    """
+    path = tmp_path / "Positions.csv"
+    path.write_text(
+        "Company Name,Title,Description,Started On,Finished On\n"
+        'Acme,Engineer,"Nationality: Indian. Date of Birth: 14 March 1996. '
+        'Built the billing service.",Jan 2020,Dec 2022\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_a_linkedin_export_is_redacted_like_a_resume(tmp_path):
+    """The resume path redacted and this one did not, so the claim, its quoted
+    excerpt, the stored dossier and the reviewer's screen all carried whatever
+    the export held."""
+    settings = Settings(
+        github_token="t", data_dir=tmp_path / "data", claim_refinement_enabled=False
+    )
+
+    result = collect_claims(settings, linkedin=_linkedin_export(tmp_path))
+
+    assert result.claims
+    assert _values_surviving(result.claims) == []
+
+
+def test_the_linkedin_redaction_is_recorded_like_the_resume_one(tmp_path):
+    """The dossier says a field was present and removed, never what it held."""
+    settings = Settings(
+        github_token="t", data_dir=tmp_path / "data", claim_refinement_enabled=False
+    )
+
+    result = collect_claims(settings, linkedin=_linkedin_export(tmp_path))
+
+    categories = {row["category"] for row in result.redactions}
+    assert {"nationality", "date_of_birth"} <= categories
+    assert all(row["document"] == "linkedin" for row in result.redactions)
+    assert not any(
+        value in row["note"].lower() for row in result.redactions for value in _PROTECTED_VALUES
+    )
+
+
+def test_the_rest_of_a_linkedin_claim_survives_redaction(tmp_path):
+    """Redaction must not eat the claim it was cleaning."""
+    settings = Settings(
+        github_token="t", data_dir=tmp_path / "data", claim_refinement_enabled=False
+    )
+
+    result = collect_claims(settings, linkedin=_linkedin_export(tmp_path))
+
+    assert any("billing service" in claim.source.excerpt.lower() for claim in result.claims)
+
+
+def test_an_export_with_nothing_protected_is_left_alone(tmp_path):
+    settings = Settings(
+        github_token="t", data_dir=tmp_path / "data", claim_refinement_enabled=False
+    )
+    path = tmp_path / "Positions.csv"
+    path.write_text(
+        "Company Name,Title,Description,Started On,Finished On\n"
+        "Acme,Engineer,Built the billing service.,Jan 2020,Dec 2022\n",
+        encoding="utf-8",
+    )
+
+    result = collect_claims(settings, linkedin=path)
+
+    assert result.redactions == []
+    assert any("billing service" in claim.source.excerpt.lower() for claim in result.claims)
