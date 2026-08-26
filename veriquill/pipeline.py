@@ -20,7 +20,7 @@ from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import Finding
 from veriquill.github.client import GitHubClient
-from veriquill.github.clone import CloneError, ephemeral_clone
+from veriquill.github.clone import CloneError, ephemeral_clone, sweep_workdir
 from veriquill.github.history import read_history
 from veriquill.github.ingest import (
     attributed_identities,
@@ -274,6 +274,9 @@ async def analyse_candidate(
     job_description: str = "",
 ) -> RunSummary:
     settings.ensure_dirs()
+    # Reclaim what earlier runs could not. A killed process never reaches the
+    # cleanup in ephemeral_clone, and nothing else ever looked.
+    sweep_workdir(settings.workdir)
     summary = RunSummary(handle=handle, started_at=datetime.now(timezone.utc))
     fingerprints = known_fingerprints if known_fingerprints is not None else {}
     active = client or GitHubClient(settings)
