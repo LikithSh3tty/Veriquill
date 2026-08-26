@@ -182,3 +182,118 @@ def test_the_api_can_supply_aliases():
     from veriquill.api.main import _split_aliases
 
     assert _split_aliases("Dev, dev@local ,") == frozenset({"Dev", "dev@local"})
+
+
+# --- what GitHub attributes, versus what a profile lets us guess -------------
+
+
+class AttributionClient:
+    """Answers /repos/.../commits the way GitHub does, for one signing address."""
+
+    def __init__(self, entries):
+        self.entries = entries
+        self.paths: list[str] = []
+
+    async def get_json(self, path, params=None):
+        self.paths.append(path)
+        return self.entries
+
+
+async def test_the_address_github_links_becomes_an_identity():
+    """The profile cannot supply it, so it has to be asked for.
+
+    TJ Holowaychuk's account is `tj`, his display name is `TJ`, and his commits
+    say `TJ Holowaychuk <tj@vision-media.ca>`. Nothing assembled from the
+    profile matches that, so five repositories he wrote read as zero commits
+    authored and each earned a high severity flag.
+    """
+    from veriquill.github.ingest import attributed_identities
+
+    client = AttributionClient(
+        [
+            {
+                "author": {"login": "tj"},
+                "commit": {"author": {"name": "TJ Holowaychuk", "email": "tj@vision-media.ca"}},
+            }
+        ]
+    )
+
+    found = await attributed_identities(client, ["tj/commander.js"], "tj")
+
+    assert "tj@vision-media.ca" in found
+    assert "tj holowaychuk" in found
+
+
+async def test_a_commit_github_did_not_link_is_not_borrowed():
+    """An unlinked commit is exactly the guesswork this replaces."""
+    from veriquill.github.ingest import attributed_identities
+
+    client = AttributionClient(
+        [
+            {
+                "author": None,
+                "commit": {"author": {"name": "Someone Else", "email": "else@example.com"}},
+            },
+            {
+                "author": {"login": "notthem"},
+                "commit": {"author": {"name": "Third Party", "email": "third@example.com"}},
+            },
+        ]
+    )
+
+    assert await attributed_identities(client, ["tj/commander.js"], "tj") == frozenset()
+
+
+async def test_a_failed_lookup_leaves_the_guesses_alone():
+    """An enrichment that raises would fail an analysis over an extra address."""
+    from veriquill.github.ingest import attributed_identities
+
+    class Broken:
+        async def get_json(self, path, params=None):
+            raise RuntimeError("rate limited")
+
+    assert await attributed_identities(Broken(), ["a/b"], "tj") == frozenset()
+
+
+def test_an_attributed_address_counts_the_commits_it_signs():
+    """The point of the lookup: those commits stop reading as somebody else's."""
+    from datetime import UTC, datetime
+
+    from veriquill.context import RepoContext
+    from veriquill.github.history import Commit
+
+    _NOW = datetime.now(UTC)
+
+    def commit(email):
+        return Commit(
+            sha="a" * 40,
+            author_name="TJ Holowaychuk",
+            author_email=email,
+            authored_at=_NOW,
+            committer_name="TJ Holowaychuk",
+            committer_email=email,
+            committed_at=_NOW,
+            parents=(),
+            files=(),
+        )
+
+    guessed = frozenset({"tj", "tj@users.noreply.github.com"})
+    ctx = RepoContext(
+        full_name="tj/commander.js",
+        path=None,
+        candidate_handle="tj",
+        identities=guessed,
+        commits=[commit("tj@vision-media.ca")],
+        metadata={},
+    )
+    assert ctx.authored_commits == []
+
+    enriched = RepoContext(
+        full_name="tj/commander.js",
+        path=None,
+        candidate_handle="tj",
+        identities=guessed | {"tj@vision-media.ca"},
+        commits=[commit("tj@vision-media.ca")],
+        metadata={},
+    )
+    assert len(enriched.authored_commits) == 1

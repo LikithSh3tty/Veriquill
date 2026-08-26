@@ -22,7 +22,11 @@ from veriquill.findings import Finding
 from veriquill.github.client import GitHubClient
 from veriquill.github.clone import CloneError, ephemeral_clone
 from veriquill.github.history import read_history
-from veriquill.github.ingest import fetch_identity, list_repositories
+from veriquill.github.ingest import (
+    attributed_identities,
+    fetch_identity,
+    list_repositories,
+)
 from veriquill.provenance.duplication import fingerprint_repo
 from veriquill.provenance.engine import run_provenance
 from veriquill.reconcile.evidence import RepoEvidence
@@ -291,6 +295,14 @@ async def analyse_candidate(
         summary.skipped = skipped
         repos = [row["repository"] for row in selected]
 
+        # Ask GitHub who it attributes these commits to, rather than relying
+        # only on the identities guessed from the profile. A candidate signing
+        # with a verified but private address matches none of the guesses, and
+        # reads as having authored none of their own work.
+        identities = frozenset(identity["identities"]) | await attributed_identities(
+            connected, [str(repo.get("full_name") or repo.get("name")) for repo in repos], handle
+        )
+
         # Asked before anything is cloned, so a caller holding a dossier with
         # this fingerprint can skip the clones entirely. One ls-remote per
         # repository against minutes of cloning and history walking.
@@ -310,7 +322,7 @@ async def analyse_candidate(
                     _analyse_repo(
                         repo,
                         handle,
-                        identity["identities"],
+                        identities,
                         identity.get("user_id"),
                         settings,
                         fingerprints,
