@@ -286,9 +286,10 @@ def build_dossier(
         "migration, a different git email, joint or employer-owned work.",
         "No protected attribute is inferred or used. Nothing was scraped; "
         "LinkedIn data is only ever read from a candidate-provided export.",
-        "Only Python is analysed in depth. Other languages are detected and "
-        "counted, and no quality judgment is made about them in either "
-        "direction.",
+        "Python is analysed through its syntax tree. TypeScript, JavaScript, "
+        "Go and Java are read textually, which finds less and can miss what a "
+        "parser would catch. Every other language is counted and not judged, "
+        "so silence about one is not a finding about it.",
     ]
     if skipped:
         names = ", ".join(str(row.get("repository")) for row in skipped[:5])
