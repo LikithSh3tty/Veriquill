@@ -147,6 +147,37 @@ class RunSummary:
         }
 
 
+def _read_and_analyse(
+    result: RepoResult,
+    clone_path: Path,
+    repo: dict[str, Any],
+    handle: str,
+    identities: frozenset[str],
+    user_id: int | None,
+    settings: Settings,
+    known_fingerprints: dict[str, list[str]],
+) -> None:
+    """Everything that happens to a clone, none of which is asynchronous.
+
+    Kept together so it can be handed to one thread. It mutates `result` in
+    place rather than returning, because the caller already owns that object
+    and a repository that fails partway should keep whatever it did manage.
+    """
+    full_name = repo.get("full_name", "unknown")
+    ctx = RepoContext(
+        full_name=full_name,
+        path=clone_path,
+        candidate_handle=handle,
+        identities=identities,
+        commits=read_history(clone_path),
+        metadata=repo,
+        user_id=user_id,
+    )
+    result.findings = run_provenance(ctx, settings, known_fingerprints)
+    result.findings.extend(run_codeeval(ctx, settings))
+    result.evidence = build_evidence(ctx, result.findings)
+    known_fingerprints[f"{handle}:{full_name}"] = fingerprint_repo(ctx)
+
 async def _analyse_repo(
     repo: dict[str, Any],
     handle: str,
@@ -164,19 +195,25 @@ async def _analyse_repo(
             async with ephemeral_clone(
                 repo["clone_url"], settings.workdir, settings.clone_timeout_seconds
             ) as clone_path:
-                ctx = RepoContext(
-                    full_name=full_name,
-                    path=clone_path,
-                    candidate_handle=handle,
-                    identities=identities,
-                    commits=read_history(clone_path),
-                    metadata=repo,
-                    user_id=user_id,
+                # In a thread, because none of it is asynchronous and all of
+                # it is slow: git log over the whole history, bandit and ruff
+                # as subprocesses, then a hash of every authored file. Run
+                # directly on the loop it blocked every other repository's
+                # clone, and their timeouts fired for work that was never
+                # slow. Three repositories in a real portfolio were reported
+                # as unclonable at three hundred seconds; each of them clones
+                # by hand in under five.
+                await asyncio.to_thread(
+                    _read_and_analyse,
+                    result,
+                    clone_path,
+                    repo,
+                    handle,
+                    identities,
+                    user_id,
+                    settings,
+                    known_fingerprints,
                 )
-                result.findings = run_provenance(ctx, settings, known_fingerprints)
-                result.findings.extend(run_codeeval(ctx, settings))
-                result.evidence = build_evidence(ctx, result.findings)
-                known_fingerprints[f"{handle}:{full_name}"] = fingerprint_repo(ctx)
         except CloneError as exc:
             result.error = str(exc)
         except Exception as exc:  # analysis failure is never evidence against anyone

@@ -194,3 +194,67 @@ def test_authorship_share_is_measured_against_people(tmp_path):
 
     assert evidence.total_commits == 12
     assert evidence.authorship_share == 1.0
+
+
+async def test_analysing_one_repository_does_not_stall_the_others(tmp_path, monkeypatch):
+    """The slow part of an analysis must not freeze the loop the clones run on.
+
+    Reading a clone is entirely synchronous: git log over the whole history,
+    bandit and ruff as subprocesses, then a hash of every authored file. Run
+    directly on the event loop that is also cloning three other repositories,
+    it stops them dead, and their clone timeouts expire while nothing is
+    downloading. A real portfolio reported three repositories as unclonable
+    after three hundred seconds each; every one of them clones by hand in under
+    five.
+
+    So this measures the loop rather than the outcome: a heartbeat ticks every
+    ten milliseconds throughout, and the assertion is that it kept ticking
+    while the slow work was in progress.
+    """
+    import asyncio
+    import time
+
+    sources = tmp_path / "sources"
+    repo = build_repo(sources, "slow", organic_history())
+
+    async def fake_identity(client, handle, aliases=frozenset()):
+        return {"identities": frozenset({"candidate"})}
+
+    async def fake_repos(client, handle):
+        return [{"full_name": "cand/slow", "clone_url": repo.as_uri(), "fork": False}]
+
+    window: list[float] = []
+
+    def slow_codeeval(ctx, settings):
+        window.append(time.monotonic())
+        time.sleep(0.5)
+        window.append(time.monotonic())
+        return []
+
+    monkeypatch.setattr("veriquill.pipeline.fetch_identity", fake_identity)
+    monkeypatch.setattr("veriquill.pipeline.list_repositories", fake_repos)
+    monkeypatch.setattr("veriquill.pipeline.run_codeeval", slow_codeeval)
+
+    beats: list[float] = []
+
+    async def heartbeat() -> None:
+        while True:
+            await asyncio.sleep(0.01)
+            beats.append(time.monotonic())
+
+    settings = Settings(github_token="t", data_dir=tmp_path / "data")
+    pulse = asyncio.create_task(heartbeat())
+    try:
+        await analyse_candidate("cand", settings, client=FakeClient())
+    finally:
+        pulse.cancel()
+
+    assert len(window) == 2, "the slow analysis never ran"
+    start, end = window
+    during = [b for b in beats if start <= b <= end]
+    # Half a second of ten millisecond ticks is fifty; a blocked loop manages
+    # none. Ten is far enough from both to survive a loaded machine.
+    assert len(during) >= 10, (
+        f"the event loop was blocked during analysis: {len(during)} ticks "
+        f"in {end - start:.2f}s"
+    )
