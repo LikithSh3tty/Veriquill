@@ -265,7 +265,7 @@ def test_candidates_can_be_added_from_the_interface(tmp_path, monkeypatch):
 
     client = _seeded_client(tmp_path, monkeypatch, flagged=False)
 
-    async def fake_pipeline(handle, settings, resume=None, linkedin=None, job_description=""):
+    async def fake_pipeline(handle, settings, resume=None, linkedin=None, job_description="", aliases=frozenset()):
         from tests.test_dimensions import make_dossier
 
         payload = make_dossier()
@@ -296,7 +296,7 @@ def test_a_failed_analysis_reports_why_rather_than_vanishing(tmp_path, monkeypat
 
     client = _seeded_client(tmp_path, monkeypatch, flagged=False)
 
-    async def explode(handle, settings, resume=None, linkedin=None, job_description=""):
+    async def explode(handle, settings, resume=None, linkedin=None, job_description="", aliases=frozenset()):
         raise RuntimeError("GitHub said 404 for 'ghost'")
 
     monkeypatch.setattr(api_main, "build_candidate_dossier", explode)
@@ -402,7 +402,7 @@ def test_a_posting_supplied_at_intake_reaches_the_analysis(tmp_path, monkeypatch
     client = _seeded_client(tmp_path, monkeypatch, flagged=False)
     seen = {}
 
-    async def capture(handle, settings, resume=None, linkedin=None, job_description=""):
+    async def capture(handle, settings, resume=None, linkedin=None, job_description="", aliases=frozenset()):
         from tests.test_dimensions import make_dossier
 
         seen["job_description"] = job_description

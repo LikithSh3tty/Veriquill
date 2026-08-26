@@ -13,7 +13,7 @@
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-optional-D97757?logo=anthropic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-single%20container-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-749%20Python%20%2B%2094%20Vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-754%20Python%20%2B%2094%20Vitest-brightgreen)
 
 </div>
 
@@ -231,7 +231,7 @@ Veriquill/
 │       ├── api.ts            # typed API client
 │       └── components/       # BandAxis, DimensionTable, ReviewPanel,
 │                             #   CohortPicker, AddCandidate, JobDescription
-├── tests/                    # 749 Python tests; ui/ carries 76 more
+├── tests/                    # 754 Python tests; ui/ carries 76 more
 ├── Dockerfile                # one image: API + CLI + built interface
 ├── DESIGN.md                 # design decisions for both surfaces
 └── PRODUCT.md                # product truth
@@ -354,6 +354,24 @@ was approved on a different set of facts, and an explanation nobody has to read
 before exporting is decoration. `recorded_by` names whoever took it down, because a
 candidate has no account here: the words are theirs, the transcription is not, and
 the export should not blur the two.
+
+### When the commits are signed with another name
+
+A candidate's commits do not always carry the identity their GitHub account has
+now. An account rename leaves the old login on everything already pushed, and one
+machine's git config can sign a whole repository as something like `Dev
+<dev@local>`. The rename is handled without help, because the noreply address
+carries the numeric account id and that does not change. The git config is not:
+those commits read as somebody else's work.
+
+```bash
+veriquill dossier alice --alias 'Dev' --alias dev@local
+```
+
+The interface takes the same thing as a comma-separated `aliases` field when adding
+a candidate. Running this tool against a real portfolio produced exactly that
+failure: a repository its owner had written alone was reported at 4% authorship,
+high severity, because 102 of its 106 commits were signed by a default git config.
 
 ### Comparing them
 

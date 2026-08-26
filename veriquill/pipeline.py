@@ -294,17 +294,26 @@ async def build_candidate_dossier(
     resume: Path | None = None,
     linkedin: Path | None = None,
     job_description: str = "",
+    aliases: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Analyse a candidate and assemble their dossier.
 
     The CLI and the HTTP intake both come through here, so a candidate added from
     the interface is the same artifact as one added from a terminal.
+
+    `aliases` carries the other names a candidate's commits are signed with: a
+    previous GitHub login, or the address a machine's git config happens to
+    write. Without them a repository the candidate genuinely wrote can read as
+    somebody else's work, which is the most damaging thing this tool can get
+    wrong. The parameter existed here before anything could reach it.
     """
     from veriquill.claims.engine import collect_claims
     from veriquill.dossier import build_dossier
     from veriquill.reconcile.engine import reconcile
 
-    summary = await analyse_candidate(handle, settings, job_description=job_description)
+    summary = await analyse_candidate(
+        handle, settings, aliases=aliases, job_description=job_description
+    )
     claim_set = collect_claims(settings, resume=resume, linkedin=linkedin)
     evidence = [r.evidence for r in summary.repositories if r.evidence is not None]
 

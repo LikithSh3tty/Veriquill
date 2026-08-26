@@ -434,12 +434,24 @@ def audit_endpoint(comparison_id: int) -> dict[str, Any]:
         }
 
 
+def _split_aliases(raw: str) -> frozenset[str]:
+    """Other names this candidate's commits are signed with.
+
+    A previous GitHub login, or the address a machine's git config happens to
+    write. Without them a repository the candidate genuinely wrote reads as
+    somebody else's work, which is the most damaging thing this tool can get
+    wrong.
+    """
+    return frozenset(part.strip() for part in (raw or "").split(",") if part.strip())
+
+
 async def _run_intake(
     job_id: str,
     handle: str,
     resume: Path | None,
     linkedin: Path | None,
     job_description: str = "",
+    aliases: frozenset[str] = frozenset(),
 ) -> None:
     """Analyse a candidate and store the dossier, then clean up the uploads.
 
@@ -468,6 +480,7 @@ async def _run_intake(
             resume=resume,
             linkedin=linkedin,
             job_description=job_description,
+            aliases=aliases,
         )
         with _session() as session:
             record = save_dossier(session, report)
@@ -489,6 +502,10 @@ async def add_candidate(
     http_request: Request,
     handle: str = Form(...),
     job_description: str = Form(""),
+    # Comma separated. A previous GitHub login, or the address a machine's
+    # git config writes. Without them a repository the candidate genuinely
+    # wrote can read as somebody else's work.
+    aliases: str = Form(""),
     resume: UploadFile | None = File(None),
     linkedin: UploadFile | None = File(None),
 ) -> dict[str, Any]:
@@ -549,7 +566,13 @@ async def add_candidate(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     background.add_task(
-        _run_intake, job.id, job.handle, resume_path, linkedin_path, job_description
+        _run_intake,
+        job.id,
+        job.handle,
+        resume_path,
+        linkedin_path,
+        job_description,
+        _split_aliases(aliases),
     )
     return {"job": job.to_dict()}
 

@@ -44,17 +44,35 @@ def main() -> None:
     """
 
 
+def _aliases(values: list[str] | None) -> frozenset[str]:
+    """The other names a candidate signs commits with.
+
+    A repository someone genuinely wrote can read as another person's work
+    when their git config says something else, and that is the most damaging
+    thing this tool can get wrong. This is how a recruiter corrects it.
+    """
+    return frozenset(value.strip() for value in (values or []) if value.strip())
+
 @app.command()
 def analyse(
     handle: str = typer.Argument(..., help="GitHub handle to analyse."),
     output: Path = typer.Option(None, "--output", "-o", help="Write the JSON summary here."),
+    alias: list[str] = typer.Option(
+        None,
+        "--alias",
+        help=(
+            "Another name this candidate's commits are signed with: a "
+            "previous GitHub login, or the address a machine's git config "
+            "happens to write. Repeatable."
+        ),
+    ),
 ) -> None:
     """Analyse a candidate's public GitHub portfolio.
 
     Findings are advisory. Veriquill never auto-rejects and never auto-hires.
     """
     settings = get_settings()
-    summary = asyncio.run(analyse_candidate(handle, settings))
+    summary = asyncio.run(analyse_candidate(handle, settings, aliases=_aliases(alias)))
     payload = json.dumps(summary.to_dict(), indent=2)
 
     if output is not None:
@@ -104,6 +122,15 @@ def dossier(
         None, "--linkedin", help="LinkedIn data export (.csv) or manual entry (.json)."
     ),
     output: Path = typer.Option(None, "--output", "-o", help="Write the JSON dossier here."),
+    alias: list[str] = typer.Option(
+        None,
+        "--alias",
+        help=(
+            "Another name this candidate's commits are signed with: a "
+            "previous GitHub login, or the address a machine's git config "
+            "happens to write. Repeatable."
+        ),
+    ),
 ) -> None:
     """Reconcile a candidate's claims against their public evidence.
 
@@ -113,7 +140,7 @@ def dossier(
     """
     settings = get_settings()
 
-    summary = asyncio.run(analyse_candidate(handle, settings))
+    summary = asyncio.run(analyse_candidate(handle, settings, aliases=_aliases(alias)))
     claim_set = collect_claims(settings, resume=resume, linkedin=linkedin)
     evidence = [r.evidence for r in summary.repositories if r.evidence is not None]
 
