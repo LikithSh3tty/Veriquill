@@ -9,7 +9,7 @@ commit two lines earlier. Nothing that skips the command could see that.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from typer.testing import CliRunner
@@ -28,7 +28,7 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr("veriquill.cli.get_settings", lambda: settings)
 
     async def fake_analysis(handle, config, aliases=frozenset(), **kwargs):
-        return RunSummary(handle=handle, started_at=datetime.now(timezone.utc), repositories=[])
+        return RunSummary(handle=handle, started_at=datetime.now(UTC), repositories=[])
 
     monkeypatch.setattr("veriquill.cli.analyse_candidate", fake_analysis)
     yield settings
