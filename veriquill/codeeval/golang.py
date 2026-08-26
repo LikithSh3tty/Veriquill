@@ -219,6 +219,7 @@ def check_go_tests(
             language=LANGUAGE,
             looked_for="*_test.go files",
             confidence=LEXICAL_CONFIDENCE,
+            repository_files=sum(profile.languages.values()),
         )
 
     hollow: list[tuple[Path, int, str]] = []

@@ -18,6 +18,7 @@ from __future__ import annotations
 import ast
 
 from veriquill.codeeval.detect import LanguageProfile, is_python_test_file
+from veriquill.codeeval.lexical import is_incidental
 from veriquill.config import Settings
 from veriquill.context import RepoContext
 from veriquill.findings import EvidenceRef, Finding, Severity
@@ -97,7 +98,13 @@ def check_tests(
     test_files = [p for p in profile.python_files if _is_test_file(p)]
     source_files = [p for p in profile.python_files if not _is_test_file(p)]
 
-    if source_files and not test_files:
+    # Silent when Python is incidental to the repository: two helper scripts
+    # beside eleven thousand Go files are not an untested codebase.
+    if (
+        source_files
+        and not test_files
+        and not is_incidental(source_files, sum(profile.languages.values()))
+    ):
         return [
             Finding(
                 check_id="codeeval.no_tests",

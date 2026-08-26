@@ -157,6 +157,31 @@ def complexity_finding(
     ]
 
 
+#: Below this share of a repository's detected source files, a language is
+#: incidental to it and an absence of tests in that language says nothing
+#: about the repository. bradfitz/go-redox is 11,277 Go files, nine
+#: JavaScript and two Python, and earned a finding for having no Python
+#: tests. mitsuhiko/insta is 56 Rust files carrying a large test suite and
+#: eight TypeScript, and earned one for having no TypeScript tests. Neither
+#: sentence is false and neither is about the repository it names.
+#:
+#: A fifth keeps the cases that are real: bradfitz/koffer is 15 Java files
+#: and 11 JavaScript, and both halves genuinely have no tests.
+INCIDENTAL_SHARE = 0.2
+
+
+def is_incidental(source_files: list[Path], repository_files: int) -> bool:
+    """Whether this language is a footnote to the repository rather than its substance.
+
+    Absence is the only claim this guards. A security or complexity finding
+    in two files is still a finding about those two files; `no tests` is a
+    statement about the repository, and a repository is not untested because
+    a helper script written in another language has no suite of its own.
+    """
+    if not repository_files or not source_files:
+        return True
+    return len(source_files) / repository_files < INCIDENTAL_SHARE
+
 def no_tests_finding(
     repo: str,
     root: Path,
@@ -165,9 +190,14 @@ def no_tests_finding(
     language: str,
     looked_for: str,
     confidence: float,
+    repository_files: int,
 ) -> list[Finding]:
-    """Source with nothing that could demonstrate it works."""
-    if not source_files:
+    """Source with nothing that could demonstrate it works.
+
+    Silent when the language is incidental to the repository, because the
+    finding would be true of the files and false about the codebase.
+    """
+    if not source_files or is_incidental(source_files, repository_files):
         return []
 
     return [

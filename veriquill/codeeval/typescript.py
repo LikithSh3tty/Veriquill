@@ -252,6 +252,7 @@ def check_typescript_tests(
             language=LANGUAGE,
             looked_for="*.test.*, *.spec.* or __tests__ files",
             confidence=LEXICAL_CONFIDENCE,
+            repository_files=sum(profile.languages.values()),
         )
 
     trivial: list[tuple[Path, int, str]] = []

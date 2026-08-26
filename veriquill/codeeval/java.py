@@ -248,6 +248,7 @@ def check_java_tests(
             language=LANGUAGE,
             looked_for="*Test.java, *Tests.java, or src/test files",
             confidence=LEXICAL_CONFIDENCE,
+            repository_files=sum(profile.languages.values()),
         )
 
     hollow: list[tuple[Path, int, str]] = []
