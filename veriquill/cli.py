@@ -153,7 +153,11 @@ def dossier(
     # dossier that only ever existed on stdout could never be compared.
     with _session() as session:
         record = save_dossier(session, report)
-    typer.echo(f"stored dossier {record.id} for {handle}", err=True)
+        # Read inside the session. Committing expires the instance, and a
+        # detached record raises rather than returning the id, which threw
+        # away a completed analysis at the very last line of the command.
+        dossier_id = record.id
+    typer.echo(f"stored dossier {dossier_id} for {handle}", err=True)
 
     payload = json.dumps(report, indent=2)
     if output is not None:
