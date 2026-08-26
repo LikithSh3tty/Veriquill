@@ -250,3 +250,90 @@ def test_a_full_read_says_nothing_about_skipping():
     notes = " ".join(dossier["provenance_and_fairness_notes"])
     assert "not read" not in notes
     assert dossier["repositories_not_read"] == []
+
+
+# --- the band has to be able to vary ----------------------------------------
+
+
+def _repo(name: str, *findings: Finding) -> RepoResult:
+    result = RepoResult(full_name=name)
+    result.findings = list(findings)
+    return result
+
+
+def _flag(check_id: str, severity: Severity, repo: str) -> Finding:
+    return Finding(
+        check_id=check_id,
+        severity=severity,
+        title=check_id.replace(".", " "),
+        rationale="because the evidence said so",
+        confidence=0.8,
+        evidence=(EvidenceRef(repo=repo, path="a.py", line=1),),
+    )
+
+
+def _portfolio(*flagged: Finding, size: int = 5) -> list[RepoResult]:
+    """`size` repositories read, with the given flags spread over the first few."""
+    repos = [_repo(f"cand/r{i}") for i in range(size)]
+    for finding in flagged:
+        name = finding.evidence[0].repo
+        for repo in repos:
+            if repo.full_name == name:
+                repo.findings.append(finding)
+                break
+    return repos
+
+
+def test_one_finding_on_one_repository_is_not_a_portfolio_verdict():
+    """Four unrelated real accounts all landed on the strongest band.
+
+    Any single high severity flag anywhere triggered it, and every real
+    portfolio has one, so the headline said the same thing about a developer
+    with two findings and a developer with twenty two.
+    """
+    repos = _portfolio(_flag("codeeval.high_complexity", Severity.HIGH, "cand/r0"))
+
+    band = build_dossier("cand", repos, [])["verdict_band"]["band"]
+
+    assert band == "code quality findings on 1 of 5 repositories read"
+
+
+def test_the_two_kinds_of_finding_are_counted_apart():
+    """They ask different questions, so one cannot stand in for the other."""
+    repos = _portfolio(
+        _flag("provenance.bulk_dump", Severity.HIGH, "cand/r0"),
+        _flag("codeeval.high_complexity", Severity.HIGH, "cand/r1"),
+        _flag("codeeval.high_complexity", Severity.HIGH, "cand/r2"),
+    )
+
+    band = build_dossier("cand", repos, [])["verdict_band"]["band"]
+
+    assert "authorship questions on 1 of 5" in band
+    assert "code quality findings on 2 of 5" in band
+
+
+def test_authorship_doubt_across_the_portfolio_still_reads_as_serious():
+    """Scope is the point; widespread provenance doubt keeps the strong wording."""
+    repos = _portfolio(
+        _flag("provenance.bulk_dump", Severity.HIGH, "cand/r0"),
+        _flag("provenance.low_contribution", Severity.HIGH, "cand/r1"),
+        _flag("provenance.bulk_dump", Severity.HIGH, "cand/r2"),
+    )
+
+    band = build_dossier("cand", repos, [])["verdict_band"]["band"]
+
+    assert band == "significant questions to resolve before proceeding"
+
+
+def test_a_critical_finding_is_never_softened_by_being_alone():
+    repos = _portfolio(_flag("provenance.bulk_dump", Severity.CRITICAL, "cand/r0"))
+
+    band = build_dossier("cand", repos, [])["verdict_band"]["band"]
+
+    assert band == "significant questions to resolve before proceeding"
+
+
+def test_a_clean_portfolio_with_nothing_to_check_says_so():
+    band = build_dossier("cand", _portfolio(), [])["verdict_band"]["band"]
+
+    assert band == "insufficient evidence to say either way"

@@ -249,6 +249,66 @@ def _open_questions(
     return questions
 
 
+def _band(
+    flags: list[dict[str, Any]],
+    repo_results: list[Any],
+    counts: dict[str, int],
+    strengths: list[Any],
+) -> str:
+    """One line saying how much of this portfolio is in question.
+
+    This used to read `significant questions to resolve before proceeding`
+    whenever a single high severity flag existed anywhere. Every real
+    portfolio has one, so every candidate got it. Four unrelated accounts
+    analysed together produced two flags, nine, thirteen and twenty two, and
+    the same sentence for all four: a headline that cannot vary cannot inform.
+
+    Scope is what a reviewer actually needs, so the band names it, and names
+    the two kinds of finding separately because they ask different questions.
+    A provenance flag asks whether this is the candidate's work. A code
+    quality flag takes the authorship for granted and judges the result.
+    Collapsing them meant one complicated function read the same as one
+    unexplained bulk import.
+
+    The strong wording is kept for the cases that earn it: anything critical,
+    or authorship doubt across most of what was read.
+    """
+    read = [r for r in repo_results if not getattr(r, "error", None)] or repo_results
+    total = len(read)
+
+    provenance: set[str] = set()
+    quality: set[str] = set()
+    critical = False
+
+    for flag in flags:
+        if flag["severity"] not in ("critical", "high"):
+            continue
+        if flag["severity"] == "critical":
+            critical = True
+        evidence = flag.get("evidence") or [{}]
+        # A flag with no repository named is about the account as a whole,
+        # so it counts once rather than being dropped for lack of a key.
+        where = str(evidence[0].get("repo") or flag["check_id"])
+        target = provenance if flag["check_id"].startswith("provenance.") else quality
+        target.add(where)
+
+    if critical or (total and len(provenance) * 2 > total):
+        return "significant questions to resolve before proceeding"
+
+    parts = []
+    if provenance:
+        parts.append(f"authorship questions on {len(provenance)} of {total} repositories read")
+    if quality:
+        parts.append(f"code quality findings on {len(quality)} of {total} repositories read")
+    if parts:
+        return "; ".join(parts)
+
+    if counts["contradicted"]:
+        return "at least one claim is not supported by the evidence"
+    if strengths:
+        return "evidence supports the claims made"
+    return "insufficient evidence to say either way"
+
 def build_dossier(
     handle: str,
     repo_results: list[Any],
@@ -264,14 +324,7 @@ def build_dossier(
         counts[result.verdict.value] += 1
 
     critical_or_high = [f for f in flags if f["severity"] in ("critical", "high")]
-    if critical_or_high:
-        band = "significant questions to resolve before proceeding"
-    elif counts["contradicted"]:
-        band = "at least one claim is not supported by the evidence"
-    elif strengths:
-        band = "evidence supports the claims made"
-    else:
-        band = "insufficient evidence to say either way"
+    band = _band(flags, repo_results, counts, strengths)
 
     evidence_coverage = 1.0 if all(f["evidence"] for f in flags) else 0.0
 
